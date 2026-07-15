@@ -1,0 +1,100 @@
+syntax = "proto3";
+
+package alekhine.analysis.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// Events carried on Kafka between the game-service and the analysis workers.
+//
+// Protobuf on the wire rather than JSON: these are long-lived records replayed
+// from a log, so a schema that can evolve without breaking old consumers matters
+// more here than human-readability.
+
+// GameFinished is emitted when a game reaches a result. Partitioned by game_id
+// so every event for one game keeps its order.
+message GameFinished {
+  string game_id = 1;
+  string white_id = 2;
+  string black_id = 3; // empty for engine games
+  bool vs_engine = 4;
+  bool rated = 5;
+  string result = 6; // WHITE_WON | BLACK_WON | DRAW
+  string end_reason = 7;
+  // Every position reached, starting from the initial one. Carried in the event
+  // so a worker needs no database round trip to start.
+  repeated string fen_history = 8;
+  // Moves in UCI, aligned with fen_history[i] -> uci[i] -> fen_history[i+1].
+  repeated string uci = 9;
+  google.protobuf.Timestamp finished_at = 10;
+}
+
+// AnalysisRequested asks the worker pool to evaluate a whole game.
+message AnalysisRequested {
+  string game_id = 1;
+  uint32 depth = 2;
+  repeated string fen_history = 3;
+  repeated string uci = 4;
+  string white_id = 5;
+  string black_id = 6;
+  bool vs_engine = 7;
+}
+
+// Quality classifies one move against the engine's verdict.
+enum Quality {
+  QUALITY_UNSPECIFIED = 0;
+  QUALITY_BEST = 1;        // matched the engine's first choice
+  QUALITY_EXCELLENT = 2;   // negligible loss
+  QUALITY_GOOD = 3;
+  QUALITY_INACCURACY = 4;
+  QUALITY_MISTAKE = 5;
+  QUALITY_BLUNDER = 6;
+  // Only move that avoids disaster, and it was found.
+  QUALITY_BRILLIANT = 7;
+}
+
+// MoveAnalysis is the engine's verdict on a single played move.
+message MoveAnalysis {
+  uint32 ply = 1;
+  string uci = 2;
+  // What the engine would have played in that position.
+  string best_uci = 3;
+  // Evaluation before and after, in centipawns from White's perspective.
+  int32 eval_before_cp = 4;
+  int32 eval_after_cp = 5;
+  // How much the move cost its mover, in centipawns. Never negative.
+  int32 centipawn_loss = 6;
+  Quality quality = 7;
+  // True when the played move was the engine's first choice.
+  bool matched_engine = 8;
+  bool mate_before = 9;
+  bool mate_after = 10;
+}
+
+// PlayerReport summarises one side's play.
+message PlayerReport {
+  string player_id = 1;
+  // Fraction of moves matching the engine's top choice, 0..1.
+  double engine_match_rate = 2;
+  // Mean centipawn loss across the player's moves.
+  double avg_centipawn_loss = 3;
+  // Lichess-style accuracy, 0..100.
+  double accuracy = 4;
+  uint32 blunders = 5;
+  uint32 mistakes = 6;
+  uint32 inaccuracies = 7;
+  uint32 move_count = 8;
+}
+
+// AnalysisCompleted carries the finished report for a game.
+message AnalysisCompleted {
+  string game_id = 1;
+  uint32 depth = 2;
+  repeated MoveAnalysis moves = 3;
+  PlayerReport white = 4;
+  PlayerReport black = 5;
+  // First position in the game never previously seen on this platform — a
+  // "theoretical novelty". Empty when every position was already known.
+  string novelty_fen = 6;
+  uint32 novelty_ply = 7;
+  google.protobuf.Timestamp analyzed_at = 8;
+}
