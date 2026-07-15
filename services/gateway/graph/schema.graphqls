@@ -1,0 +1,113 @@
+# Public GraphQL API for Alekhine's Counter-Gambit.
+#
+# The gateway owns no state: every field here is resolved by calling an internal
+# gRPC service — game-service for authoritative game state, session-manager for
+# live clocks and presence.
+
+scalar Time
+
+"Which side of the board."
+enum Side {
+  WHITE
+  BLACK
+}
+
+"Lifecycle state / result of a game."
+enum GameStatus {
+  IN_PROGRESS
+  WHITE_WON
+  BLACK_WON
+  DRAW
+}
+
+"Why a finished game ended."
+enum EndReason {
+  CHECKMATE
+  STALEMATE
+  INSUFFICIENT_MATERIAL
+  FIFTY_MOVE
+  THREEFOLD
+  RESIGNATION
+  FLAG
+  ABANDONMENT
+}
+
+"A single half-move."
+type Move {
+  "Half-move number, starting at 1."
+  ply: Int!
+  "Move in UCI long algebraic notation, e.g. \"e2e4\"."
+  uci: String!
+  "Resulting position in FEN."
+  fenAfter: String!
+}
+
+"""
+Live clock state from the Erlang session-manager. Null for games that have no
+live session (games against the engine).
+"""
+type Clock {
+  whiteMs: Int!
+  blackMs: Int!
+  "Side whose clock is currently running."
+  turn: Side!
+  "False once the session has finished."
+  running: Boolean!
+}
+
+type Game {
+  id: ID!
+  "Current position in FEN."
+  fen: String!
+  status: GameStatus!
+  endReason: EndReason
+  vsEngine: Boolean!
+  whiteId: ID!
+  "Null when playing the engine."
+  blackId: ID
+  moves: [Move!]!
+  startedAt: Time!
+  endedAt: Time
+  "Live session state; resolved from the session-manager on demand."
+  clock: Clock
+}
+
+type Query {
+  "Fetch a game and its full move list."
+  game(id: ID!): Game
+  "Liveness probe for clients."
+  health: String!
+}
+
+input CreateGameInput {
+  "Omit to have the server mint a guest user."
+  whiteId: ID
+  "Omit to play against the engine."
+  blackId: ID
+  "Engine search depth for replies; 0 uses the worker default."
+  engineDepth: Int
+  "Time control for live sessions; 0 uses the session-manager defaults."
+  initialMs: Int
+  incrementMs: Int
+}
+
+input MoveInput {
+  gameId: ID!
+  "Move in UCI long algebraic notation."
+  uci: String!
+  "Required for human-vs-human games; checked against the side to move."
+  playerId: ID
+}
+
+input ResignInput {
+  gameId: ID!
+  playerId: ID!
+}
+
+type Mutation {
+  createGame(input: CreateGameInput!): Game!
+  "Submit a move. Errors if illegal or out of turn."
+  move(input: MoveInput!): Game!
+  "Resign, handing the win to the opponent."
+  resign(input: ResignInput!): Game!
+}
