@@ -51,6 +51,7 @@ T1.1; supersedes the earlier per-service-module idea.)*
 │   ├── terraform/              # Terraform modules (Q4)
 │   ├── k8s/                    # raw manifests / ArgoCD apps (Q4)
 │   └── observability/          # Prometheus, Grafana, Jaeger config (Q4)
+├── web/                        # static neumorphic client + NGINX (Q2)
 ├── load/                       # autocannon + k6 scripts (Q4)
 ├── migrations/                 # SQL migrations (goose format)
 ├── docs/
@@ -305,7 +306,7 @@ outcomes — expand each into T-level subtasks when you start the epic.
 **Acceptance:** create + play a game entirely via GraphQL.
 **Commit:** `feat(gateway): graphql api over internal grpc`
 
-### [ ] T2.6 — GraphQL subscriptions + WebSocket transport
+### [x] T2.6 — GraphQL subscriptions + WebSocket transport
 **Depends on:** T2.5
 **Context:** `/ws` endpoint; GraphQL subscription for live game updates (moves, clocks). WS upgrade handling.
 **Acceptance:** a subscriber receives move/clock events pushed in real time.
@@ -439,6 +440,6 @@ observable in Grafana + Jaeger, load-tested with autoscaling — reproducible fr
 
 ## Progress tracker
 - Q1: ☑ T1.1 ☑ T1.2 ☑ T1.3 ☑ T1.4 ☑ T1.5 ☑ T1.6 ☑ T1.7 ☑ T1.8 ☑ T1.9
-- Q2: ☑ T2.1 ☑ T2.2 ☑ T2.3 ☑ T2.4 ☑ T2.5 ☐ T2.6 ☐ T2.7 ☐ T2.8
+- Q2: ☑ T2.1 ☑ T2.2 ☑ T2.3 ☑ T2.4 ☑ T2.5 ☑ T2.6 ☐ T2.7 ☐ T2.8
 - Q3: ☐ T3.1 ☐ T3.2 ☐ T3.3 ☐ T3.4 ☐ T3.5 ☐ T3.6
 - Q4: ☐ T4.1 ☐ T4.2 ☐ T4.3 ☐ T4.4 ☐ T4.5 ☐ T4.6 ☐ T4.7 ☐ T4.8 ☐ T4.9 ☐ T4.10

@@ -66,8 +66,15 @@ manager is live and bridged to Go over gRPC:
   playground at `/`. Holds no state: it translates GraphQL into internal gRPC.
   `Game.clock` is a lazy field resolver, so the session-manager is only queried
   when a client actually selects it (and is null for engine games).
-- `make up` now runs all five services: Postgres, engine-worker,
-  session-manager, game-service, gateway.
+- **Live subscriptions** — `subscription { gameUpdated(gameId:) }` over
+  WebSocket (`graphql-transport-ws` at `/ws`). Subscribers get the current state
+  on connect, then every move pushed with no polling. Fanout is in-process for
+  now; T2.7 swaps in Redis so it survives multiple gateway replicas.
+- **Web client** (`web/`) — a dependency-free neumorphic UI served by NGINX,
+  which also proxies `/graphql` and `/ws` so the browser sees one origin.
+  Play Stockfish or share a link and watch the board update live in both tabs.
+- `make up` now runs all six services: Postgres, engine-worker,
+  session-manager, game-service, gateway, web (**open http://localhost:3000**).
 
 Play a whole game over GraphQL:
 

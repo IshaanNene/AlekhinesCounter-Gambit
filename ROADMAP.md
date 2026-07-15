@@ -136,13 +136,14 @@ boards in real time; a spectator can watch; disconnect/reconnect is handled.
 - [x] GraphQL schema: `game` query, `createGame`/`move`/`resign` mutations
 - [x] Translate GraphQL ↔ internal gRPC calls (game-service + session-manager)
 - [ ] `user` / game-history queries (deferred to Q3, alongside ratings & history)
-- [ ] GraphQL subscriptions for live game updates (T2.6)
+- [x] GraphQL subscriptions for live game updates
 - [ ] AuthN (JWT sessions) + basic authorization (T2.8)
 
 ### Epic 2.3 — Real-time transport (WebSockets)
-- [ ] WebSocket endpoint for board/clock updates
-- [ ] Redis pub/sub fanout so any gateway replica can push to any client
-- [ ] Presence tracking (who's connected / spectating)
+- [x] WebSocket endpoint for board/clock updates (graphql-transport-ws at `/ws`)
+- [x] Web client: neumorphic board, live via subscription, NGINX-fronted
+- [ ] Redis pub/sub fanout so any gateway replica can push to any client (T2.7)
+- [ ] Presence tracking (who's connected / spectating) (T2.7)
 
 ### Epic 2.4 — Redis integration
 - [ ] Position→eval cache (transposition-style, keyed by FEN)
