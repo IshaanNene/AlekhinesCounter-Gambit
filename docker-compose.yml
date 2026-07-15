@@ -70,6 +70,10 @@ services:
       ACG_GAME_ADDR_CLIENT: "game-service:50051"
       ACG_SESSION_ADDR: "session-manager:50053"
       ACG_GRAPHQL_PLAYGROUND: "true"
+      # Local development secret. Generate a real one per environment and keep it
+      # out of source control (Q4 moves this to a Kubernetes Secret).
+      ACG_SESSION_SECRET: "dev-only-secret-change-me-in-production-32b"
+      ACG_COOKIE_SECURE: "false"
     ports:
       - "8080:8080"
     depends_on:

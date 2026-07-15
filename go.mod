@@ -5,10 +5,12 @@ go 1.25.7
 require (
 	github.com/99designs/gqlgen v0.17.94
 	github.com/coder/websocket v1.8.15
+	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/pressly/goose/v3 v3.27.2
 	github.com/vektah/gqlparser/v2 v2.5.36
+	golang.org/x/crypto v0.54.0
 	google.golang.org/grpc v1.82.0
 	google.golang.org/protobuf v1.36.11
 )

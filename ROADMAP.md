@@ -135,9 +135,9 @@ boards in real time; a spectator can watch; disconnect/reconnect is handled.
 ### Epic 2.2 — GraphQL API gateway (Go)
 - [x] GraphQL schema: `game` query, `createGame`/`move`/`resign` mutations
 - [x] Translate GraphQL ↔ internal gRPC calls (game-service + session-manager)
-- [ ] `user` / game-history queries (deferred to Q3, alongside ratings & history)
+- [x] `me` / `user` / `gameHistory` / `leaderboard` queries
 - [x] GraphQL subscriptions for live game updates
-- [ ] AuthN (JWT sessions) + basic authorization (T2.8)
+- [x] AuthN (JWT sessions) + basic authorization
 
 ### Epic 2.3 — Real-time transport (WebSockets)
 - [x] WebSocket endpoint for board/clock updates (graphql-transport-ws at `/ws`)
@@ -151,8 +151,9 @@ boards in real time; a spectator can watch; disconnect/reconnect is handled.
 - [ ] Session/token store
 
 ### Epic 2.5 — Matchmaking
-- [ ] Queue players by rating band
-- [ ] Pair, create game, hand off to session manager
+- [x] Open seats: create a game, share the link, opponent joins as themselves
+- [x] Elo ratings applied on completion (+ history and leaderboard)
+- [ ] Automatic queue pairing by rating band (T2.8 remainder)
 - [ ] Bot fallback (play vs engine if no human found)
 
 **Exit criteria:** live human-vs-human game across two browsers, spectators,

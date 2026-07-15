@@ -72,13 +72,15 @@ T1.1; supersedes the earlier per-service-module idea.)*
 - **gRPC ports:** game-service `50051`, engine-worker `50052`, session-manager `50053`
 - **HTTP ports:** gateway `8080` (GraphQL at `/graphql`, WS at `/ws`, health at `/healthz`, metrics at `/metrics`)
 - **Infra ports (local host):** Postgres `5433` (host) → `5432` (container; 5433 avoids a common local Postgres on 5432), Redis `6379`, Kafka `9092`, MinIO `9000`/console `9001`. In-container/compose network, Postgres is reached as `postgres:5432`.
-- **Proto packages:** `alekhine.game.v1`, `alekhine.engine.v1`, `alekhine.session.v1`. Go package option `github.com/IshaanNene/AlekhinesCounter-Gambit/proto/gen/go/<pkg>`.
+- **Proto packages:** `alekhine.game.v1`, `alekhine.engine.v1`, `alekhine.session.v1`, `alekhine.auth.v1`. Go package option `github.com/IshaanNene/AlekhinesCounter-Gambit/proto/gen/go/<pkg>`.
 - **Config:** 12-factor. Read from env vars, prefix `ACG_` (e.g. `ACG_POSTGRES_DSN`). Provide sane localhost defaults.
   Known vars: `ACG_POSTGRES_DSN`, `ACG_GAME_ADDR` (game-service listen), `ACG_ENGINE_ADDR`,
   `ACG_STOCKFISH_PATH`, `ACG_RUN_MIGRATIONS`, `ACG_SESSION_ADDR` (client → session-manager;
   empty disables live sessions), `ACG_SESSION_PORT` (session-manager's own gRPC listen port),
   `ACG_GATEWAY_ADDR` (gateway HTTP listen), `ACG_GAME_ADDR_CLIENT` (gateway → game-service),
-  `ACG_GRAPHQL_PLAYGROUND`.
+  `ACG_GRAPHQL_PLAYGROUND`, `ACG_SESSION_SECRET` (**required** by the gateway; 32+ bytes,
+  signs session JWTs), `ACG_COOKIE_SECURE` (set true behind HTTPS), `ACG_MAIL_ENABLED`
+  (false returns passwordless tokens in-band for local dev instead of emailing them).
 - **Logging:** structured JSON via `log/slog`. Every service logs a startup line with its version + listen addr.
 - **Errors:** wrap with `fmt.Errorf("...: %w", err)`. gRPC handlers return proper `status.Error` codes.
 - **Chess notation:** positions are FEN strings; moves are UCI long algebraic (e.g. `e2e4`, `e7e8q`).
