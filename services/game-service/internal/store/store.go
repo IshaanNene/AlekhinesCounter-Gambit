@@ -18,6 +18,10 @@ var ErrNotFound = errors.New("not found")
 // ErrNotInProgress means the game exists but is already finished.
 var ErrNotInProgress = errors.New("game is not in progress")
 
+// ErrSeatUnavailable means the Black seat is taken, the game is not joinable, or
+// the caller is already White.
+var ErrSeatUnavailable = errors.New("this game cannot be joined")
+
 // Game is a stored game row (moves are loaded separately).
 type Game struct {
 	ID          string
@@ -28,8 +32,13 @@ type Game struct {
 	EndReason   string // empty while in progress
 	FEN         string
 	EngineDepth int
-	StartedAt   time.Time
-	EndedAt     *time.Time
+	Rated       bool
+	InitialMs   int64
+	IncrementMs int64
+	// AwaitingOpponent is true while a human game has no Black player yet.
+	AwaitingOpponent bool
+	StartedAt        time.Time
+	EndedAt          *time.Time
 }
 
 // Move is a stored half-move.
@@ -60,30 +69,21 @@ func Connect(ctx context.Context, dsn string) (*Store, error) {
 // Close releases the pool.
 func (s *Store) Close() { s.pool.Close() }
 
-// CreateGuestUser inserts a throwaway user and returns its id. Useful for the
-// vertical slice where games are created without an auth system.
-func (s *Store) CreateGuestUser(ctx context.Context) (string, error) {
-	id, err := uuid.NewV7()
-	if err != nil {
-		return "", err
-	}
-	// Use the full UUID: UUIDv7's leading bytes are a millisecond timestamp, so a
-	// short prefix collides for guests created in the same millisecond.
-	username := "guest-" + id.String()
-	_, err = s.pool.Exec(ctx,
-		`INSERT INTO users (id, username) VALUES ($1, $2)`, id.String(), username)
-	if err != nil {
-		return "", fmt.Errorf("insert user: %w", err)
-	}
-	return id.String(), nil
-}
-
 // CreateGameParams describes a new game.
 type CreateGameParams struct {
-	WhiteID     string
-	BlackID     string // empty => game against the engine
+	WhiteID string
+	// BlackID may be empty: with VsEngine false that leaves an open seat another
+	// player can join.
+	BlackID     string
+	VsEngine    bool
 	EngineDepth int
 	StartFEN    string
+	// Rated games move both players' Elo on completion. Ignored for engine games.
+	Rated bool
+	// Time control for the live session, stored so a game whose seat is still
+	// open can start its clock correctly whenever an opponent joins.
+	InitialMs   int64
+	IncrementMs int64
 }
 
 // CreateGame inserts a new game and returns it.
@@ -93,31 +93,61 @@ func (s *Store) CreateGame(ctx context.Context, p CreateGameParams) (*Game, erro
 		return nil, err
 	}
 	var blackID *string
-	vsEngine := p.BlackID == ""
-	if !vsEngine {
+	vsEngine := p.VsEngine
+	if !vsEngine && p.BlackID != "" {
 		blackID = &p.BlackID
 	}
 
+	// Rated only when two real players meet: engine games must not move Elo.
+	rated := !vsEngine && p.Rated
+
 	row := s.pool.QueryRow(ctx,
-		`INSERT INTO games (id, white_id, black_id, status, fen, engine_depth)
-		 VALUES ($1, $2, $3, 'IN_PROGRESS', $4, $5)
+		`INSERT INTO games (id, white_id, black_id, status, fen, engine_depth, vs_engine, rated,
+		                    initial_ms, increment_ms)
+		 VALUES ($1, $2, $3, 'IN_PROGRESS', $4, $5, $6, $7, $8, $9)
 		 RETURNING started_at`,
-		id.String(), p.WhiteID, blackID, p.StartFEN, p.EngineDepth)
+		id.String(), p.WhiteID, blackID, p.StartFEN, p.EngineDepth, vsEngine, rated,
+		p.InitialMs, p.IncrementMs)
 	var startedAt time.Time
 	if err := row.Scan(&startedAt); err != nil {
 		return nil, fmt.Errorf("insert game: %w", err)
 	}
 
 	return &Game{
-		ID:          id.String(),
-		WhiteID:     p.WhiteID,
-		BlackID:     p.BlackID,
-		VsEngine:    vsEngine,
-		Status:      "IN_PROGRESS",
-		FEN:         p.StartFEN,
-		EngineDepth: p.EngineDepth,
-		StartedAt:   startedAt,
+		ID:               id.String(),
+		WhiteID:          p.WhiteID,
+		BlackID:          p.BlackID,
+		VsEngine:         vsEngine,
+		Status:           "IN_PROGRESS",
+		FEN:              p.StartFEN,
+		EngineDepth:      p.EngineDepth,
+		Rated:            rated,
+		InitialMs:        p.InitialMs,
+		IncrementMs:      p.IncrementMs,
+		AwaitingOpponent: !vsEngine && p.BlackID == "",
+		StartedAt:        startedAt,
 	}, nil
+}
+
+// JoinGame claims the open Black seat.
+//
+// The guard clause is the whole concurrency story: `WHERE black_id IS NULL`
+// means the database picks exactly one winner when two players race to join, and
+// `white_id <> $2` stops someone playing themselves.
+func (s *Store) JoinGame(ctx context.Context, gameID, playerID string) (*Game, error) {
+	tag, err := s.pool.Exec(ctx,
+		`UPDATE games SET black_id = $1
+		  WHERE id = $2 AND black_id IS NULL AND vs_engine = false
+		        AND status = 'IN_PROGRESS' AND white_id <> $1`,
+		playerID, gameID)
+	if err != nil {
+		return nil, fmt.Errorf("join game: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return nil, ErrSeatUnavailable
+	}
+	g, _, err := s.GetGame(ctx, gameID)
+	return g, err
 }
 
 // GetGame loads a game and its moves ordered by ply.
@@ -126,19 +156,21 @@ func (s *Store) GetGame(ctx context.Context, id string) (*Game, []Move, error) {
 	var blackID *string
 	var endReason *string
 	err := s.pool.QueryRow(ctx,
-		`SELECT white_id, black_id, status, end_reason, fen, engine_depth, started_at, ended_at
+		`SELECT white_id, black_id, status, end_reason, fen, engine_depth, vs_engine, rated,
+		        initial_ms, increment_ms, started_at, ended_at
 		 FROM games WHERE id = $1`, id).
-		Scan(&g.WhiteID, &blackID, &g.Status, &endReason, &g.FEN, &g.EngineDepth, &g.StartedAt, &g.EndedAt)
+		Scan(&g.WhiteID, &blackID, &g.Status, &endReason, &g.FEN, &g.EngineDepth,
+			&g.VsEngine, &g.Rated, &g.InitialMs, &g.IncrementMs, &g.StartedAt, &g.EndedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil, ErrNotFound
 	}
 	if err != nil {
 		return nil, nil, fmt.Errorf("select game: %w", err)
 	}
-	g.VsEngine = blackID == nil
 	if blackID != nil {
 		g.BlackID = *blackID
 	}
+	g.AwaitingOpponent = !g.VsEngine && blackID == nil && g.Status == "IN_PROGRESS"
 	if endReason != nil {
 		g.EndReason = *endReason
 	}

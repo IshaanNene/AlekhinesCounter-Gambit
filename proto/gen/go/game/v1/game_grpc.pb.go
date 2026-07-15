@@ -23,7 +23,9 @@ const (
 	GameService_SubmitMove_FullMethodName  = "/alekhine.game.v1.GameService/SubmitMove"
 	GameService_GetGame_FullMethodName     = "/alekhine.game.v1.GameService/GetGame"
 	GameService_Resign_FullMethodName      = "/alekhine.game.v1.GameService/Resign"
-	GameService_CreateGuest_FullMethodName = "/alekhine.game.v1.GameService/CreateGuest"
+	GameService_JoinGame_FullMethodName    = "/alekhine.game.v1.GameService/JoinGame"
+	GameService_ListGames_FullMethodName   = "/alekhine.game.v1.GameService/ListGames"
+	GameService_Leaderboard_FullMethodName = "/alekhine.game.v1.GameService/Leaderboard"
 	GameService_LegalMoves_FullMethodName  = "/alekhine.game.v1.GameService/LegalMoves"
 )
 
@@ -42,9 +44,12 @@ type GameServiceClient interface {
 	GetGame(ctx context.Context, in *GetGameRequest, opts ...grpc.CallOption) (*GetGameResponse, error)
 	// Resign ends a game in the opponent's favour.
 	Resign(ctx context.Context, in *ResignRequest, opts ...grpc.CallOption) (*ResignResponse, error)
-	// CreateGuest mints an anonymous user so a client can play before real
-	// accounts exist (auth arrives in T2.8).
-	CreateGuest(ctx context.Context, in *CreateGuestRequest, opts ...grpc.CallOption) (*CreateGuestResponse, error)
+	// JoinGame claims the open Black seat of a game awaiting an opponent.
+	JoinGame(ctx context.Context, in *JoinGameRequest, opts ...grpc.CallOption) (*JoinGameResponse, error)
+	// ListGames returns a user's game history, most recent first.
+	ListGames(ctx context.Context, in *ListGamesRequest, opts ...grpc.CallOption) (*ListGamesResponse, error)
+	// Leaderboard returns the highest-rated accounts.
+	Leaderboard(ctx context.Context, in *LeaderboardRequest, opts ...grpc.CallOption) (*LeaderboardResponse, error)
 	// LegalMoves lists every legal move in a game's current position. Clients use
 	// it to highlight destinations and validate premoves without reimplementing
 	// move generation — the rules stay in one place.
@@ -99,10 +104,30 @@ func (c *gameServiceClient) Resign(ctx context.Context, in *ResignRequest, opts 
 	return out, nil
 }
 
-func (c *gameServiceClient) CreateGuest(ctx context.Context, in *CreateGuestRequest, opts ...grpc.CallOption) (*CreateGuestResponse, error) {
+func (c *gameServiceClient) JoinGame(ctx context.Context, in *JoinGameRequest, opts ...grpc.CallOption) (*JoinGameResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(CreateGuestResponse)
-	err := c.cc.Invoke(ctx, GameService_CreateGuest_FullMethodName, in, out, cOpts...)
+	out := new(JoinGameResponse)
+	err := c.cc.Invoke(ctx, GameService_JoinGame_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *gameServiceClient) ListGames(ctx context.Context, in *ListGamesRequest, opts ...grpc.CallOption) (*ListGamesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListGamesResponse)
+	err := c.cc.Invoke(ctx, GameService_ListGames_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *gameServiceClient) Leaderboard(ctx context.Context, in *LeaderboardRequest, opts ...grpc.CallOption) (*LeaderboardResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(LeaderboardResponse)
+	err := c.cc.Invoke(ctx, GameService_Leaderboard_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -134,9 +159,12 @@ type GameServiceServer interface {
 	GetGame(context.Context, *GetGameRequest) (*GetGameResponse, error)
 	// Resign ends a game in the opponent's favour.
 	Resign(context.Context, *ResignRequest) (*ResignResponse, error)
-	// CreateGuest mints an anonymous user so a client can play before real
-	// accounts exist (auth arrives in T2.8).
-	CreateGuest(context.Context, *CreateGuestRequest) (*CreateGuestResponse, error)
+	// JoinGame claims the open Black seat of a game awaiting an opponent.
+	JoinGame(context.Context, *JoinGameRequest) (*JoinGameResponse, error)
+	// ListGames returns a user's game history, most recent first.
+	ListGames(context.Context, *ListGamesRequest) (*ListGamesResponse, error)
+	// Leaderboard returns the highest-rated accounts.
+	Leaderboard(context.Context, *LeaderboardRequest) (*LeaderboardResponse, error)
 	// LegalMoves lists every legal move in a game's current position. Clients use
 	// it to highlight destinations and validate premoves without reimplementing
 	// move generation — the rules stay in one place.
@@ -163,8 +191,14 @@ func (UnimplementedGameServiceServer) GetGame(context.Context, *GetGameRequest) 
 func (UnimplementedGameServiceServer) Resign(context.Context, *ResignRequest) (*ResignResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Resign not implemented")
 }
-func (UnimplementedGameServiceServer) CreateGuest(context.Context, *CreateGuestRequest) (*CreateGuestResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method CreateGuest not implemented")
+func (UnimplementedGameServiceServer) JoinGame(context.Context, *JoinGameRequest) (*JoinGameResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method JoinGame not implemented")
+}
+func (UnimplementedGameServiceServer) ListGames(context.Context, *ListGamesRequest) (*ListGamesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListGames not implemented")
+}
+func (UnimplementedGameServiceServer) Leaderboard(context.Context, *LeaderboardRequest) (*LeaderboardResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Leaderboard not implemented")
 }
 func (UnimplementedGameServiceServer) LegalMoves(context.Context, *LegalMovesRequest) (*LegalMovesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method LegalMoves not implemented")
@@ -262,20 +296,56 @@ func _GameService_Resign_Handler(srv interface{}, ctx context.Context, dec func(
 	return interceptor(ctx, in, info, handler)
 }
 
-func _GameService_CreateGuest_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CreateGuestRequest)
+func _GameService_JoinGame_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(JoinGameRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(GameServiceServer).CreateGuest(ctx, in)
+		return srv.(GameServiceServer).JoinGame(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: GameService_CreateGuest_FullMethodName,
+		FullMethod: GameService_JoinGame_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(GameServiceServer).CreateGuest(ctx, req.(*CreateGuestRequest))
+		return srv.(GameServiceServer).JoinGame(ctx, req.(*JoinGameRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _GameService_ListGames_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListGamesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GameServiceServer).ListGames(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: GameService_ListGames_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GameServiceServer).ListGames(ctx, req.(*ListGamesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _GameService_Leaderboard_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(LeaderboardRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GameServiceServer).Leaderboard(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: GameService_Leaderboard_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GameServiceServer).Leaderboard(ctx, req.(*LeaderboardRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -322,8 +392,16 @@ var GameService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _GameService_Resign_Handler,
 		},
 		{
-			MethodName: "CreateGuest",
-			Handler:    _GameService_CreateGuest_Handler,
+			MethodName: "JoinGame",
+			Handler:    _GameService_JoinGame_Handler,
+		},
+		{
+			MethodName: "ListGames",
+			Handler:    _GameService_ListGames_Handler,
+		},
+		{
+			MethodName: "Leaderboard",
+			Handler:    _GameService_Leaderboard_Handler,
 		},
 		{
 			MethodName: "LegalMoves",

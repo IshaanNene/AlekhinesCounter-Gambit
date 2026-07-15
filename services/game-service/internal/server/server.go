@@ -57,16 +57,20 @@ func (s *Server) CreateGame(ctx context.Context, req *gamev1.CreateGameRequest) 
 	g, err := s.store.CreateGame(ctx, store.CreateGameParams{
 		WhiteID:     whiteID,
 		BlackID:     req.GetBlackId(),
+		VsEngine:    req.GetVsEngine(),
 		EngineDepth: int(req.GetEngineDepth()),
 		StartFEN:    chess.StartFEN,
+		Rated:       req.GetRated(),
+		InitialMs:   req.GetInitialMs(),
+		IncrementMs: req.GetIncrementMs(),
 	})
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "create game: %v", err)
 	}
 
-	// Human-vs-human games get a live session (clocks, presence, reconnects) in
-	// the session-manager. Engine games need no session.
-	if !g.VsEngine && s.session.Enabled() {
+	// Live sessions need both seats filled, so an open game waits for JoinGame.
+	// Engine games never need one.
+	if !g.VsEngine && !g.AwaitingOpponent && s.session.Enabled() {
 		sctx, cancel := context.WithTimeout(ctx, sessionTimeout)
 		defer cancel()
 		if err := s.session.Create(sctx, session.CreateParams{
@@ -143,6 +147,9 @@ func (s *Server) SubmitMove(ctx context.Context, req *gamev1.SubmitMoveRequest) 
 			s.notifySession(ctx, g.ID, req.GetPlayerId())
 		}
 	}
+	if ended {
+		s.applyRatings(ctx, g.ID, result)
+	}
 
 	// Engine reply, when applicable and the game is still going.
 	if !ended && g.VsEngine {
@@ -213,16 +220,6 @@ func (s *Server) LegalMoves(ctx context.Context, req *gamev1.LegalMovesRequest) 
 	return &gamev1.LegalMovesResponse{Uci: out}, nil
 }
 
-// CreateGuest mints an anonymous user. It exists so clients can obtain a player
-// identity before real accounts/auth land (T2.8).
-func (s *Server) CreateGuest(ctx context.Context, _ *gamev1.CreateGuestRequest) (*gamev1.CreateGuestResponse, error) {
-	id, err := s.store.CreateGuestUser(ctx)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "create guest: %v", err)
-	}
-	return &gamev1.CreateGuestResponse{UserId: id, Username: "guest-" + id}, nil
-}
-
 // Resign ends a game in the opponent's favour. Either participant may resign at
 // any point while the game is in progress; it is not turn-dependent.
 func (s *Server) Resign(ctx context.Context, req *gamev1.ResignRequest) (*gamev1.ResignResponse, error) {
@@ -265,12 +262,53 @@ func (s *Server) Resign(ctx context.Context, req *gamev1.ResignRequest) (*gamev1
 			s.log.Warn("session resign failed", "game_id", g.ID, "error", err)
 		}
 	}
+	s.applyRatings(ctx, g.ID, winner)
 
 	updated, moves, err := s.store.GetGame(ctx, g.ID)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "reload game: %v", err)
 	}
 	return &gamev1.ResignResponse{Game: toProtoGame(updated, moves)}, nil
+}
+
+// JoinGame claims a game's open Black seat and starts its live session.
+func (s *Server) JoinGame(ctx context.Context, req *gamev1.JoinGameRequest) (*gamev1.JoinGameResponse, error) {
+	if req.GetGameId() == "" || req.GetPlayerId() == "" {
+		return nil, status.Error(codes.InvalidArgument, "game_id and player_id are required")
+	}
+
+	g, err := s.store.JoinGame(ctx, req.GetGameId(), req.GetPlayerId())
+	if errors.Is(err, store.ErrSeatUnavailable) {
+		return nil, status.Error(codes.FailedPrecondition,
+			"this game is not open to join — it may already have an opponent")
+	}
+	if errors.Is(err, store.ErrNotFound) {
+		return nil, status.Error(codes.NotFound, "game not found")
+	}
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "join game: %v", err)
+	}
+
+	// Both seats are filled, so the live session can start now.
+	if s.session.Enabled() {
+		sctx, cancel := context.WithTimeout(ctx, sessionTimeout)
+		defer cancel()
+		if err := s.session.Create(sctx, session.CreateParams{
+			GameID:      g.ID,
+			WhiteID:     g.WhiteID,
+			BlackID:     g.BlackID,
+			InitialMs:   g.InitialMs,
+			IncrementMs: g.IncrementMs,
+		}); err != nil {
+			s.log.Warn("session create on join failed", "game_id", g.ID, "error", err)
+		}
+	}
+
+	_, moves, err := s.store.GetGame(ctx, g.ID)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "reload game: %v", err)
+	}
+	return &gamev1.JoinGameResponse{Game: toProtoGame(g, moves)}, nil
 }
 
 // authorizeMover checks that playerID owns the side to move.
@@ -356,14 +394,16 @@ func buildHistory(moves []store.Move) []string {
 // toProtoGame converts a stored game (+moves) to the proto representation.
 func toProtoGame(g *store.Game, moves []store.Move) *gamev1.Game {
 	pg := &gamev1.Game{
-		Id:        g.ID,
-		Fen:       g.FEN,
-		Status:    statusFromDB(g.Status),
-		EndReason: endReasonFromDB(g.EndReason),
-		VsEngine:  g.VsEngine,
-		WhiteId:   g.WhiteID,
-		BlackId:   g.BlackID,
-		StartedAt: timestamppb.New(g.StartedAt),
+		Id:               g.ID,
+		Fen:              g.FEN,
+		Status:           statusFromDB(g.Status),
+		EndReason:        endReasonFromDB(g.EndReason),
+		VsEngine:         g.VsEngine,
+		AwaitingOpponent: g.AwaitingOpponent,
+		Rated:            g.Rated,
+		WhiteId:          g.WhiteID,
+		BlackId:          g.BlackID,
+		StartedAt:        timestamppb.New(g.StartedAt),
 	}
 	if g.EndedAt != nil {
 		pg.EndedAt = timestamppb.New(*g.EndedAt)

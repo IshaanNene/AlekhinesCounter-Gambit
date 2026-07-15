@@ -1,0 +1,85 @@
+syntax = "proto3";
+
+package alekhine.auth.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// AuthService owns identity: accounts, credentials, and profile. It verifies
+// credentials and returns a user; it does NOT issue sessions. The gateway mints
+// and validates the JWT, so session policy lives at the edge and this service
+// stays a pure identity store.
+//
+// Three ways in, so nobody is forced through a signup wall:
+//   * CreateGuest        — one click, no details, playable immediately
+//   * Register / Login   — classic username + password
+//   * RequestLoginToken / RedeemLoginToken — passwordless one-time token
+service AuthService {
+  // CreateGuest mints an anonymous account.
+  rpc CreateGuest(CreateGuestRequest) returns (AuthResponse);
+  // Register creates a password account. If upgrade_user_id names an existing
+  // guest, that guest is upgraded in place so its games and rating carry over.
+  rpc Register(RegisterRequest) returns (AuthResponse);
+  // Login verifies a username/email and password.
+  rpc Login(LoginRequest) returns (AuthResponse);
+  // RequestLoginToken issues a single-use token for passwordless sign-in.
+  rpc RequestLoginToken(RequestLoginTokenRequest) returns (RequestLoginTokenResponse);
+  // RedeemLoginToken exchanges a valid, unconsumed token for the user.
+  rpc RedeemLoginToken(RedeemLoginTokenRequest) returns (AuthResponse);
+  // GetUser returns a public profile.
+  rpc GetUser(GetUserRequest) returns (AuthResponse);
+}
+
+message User {
+  string id = 1;
+  string username = 2;
+  // Empty unless the caller owns the account.
+  string email = 3;
+  int32 elo = 4;
+  bool is_guest = 5;
+  int32 games_played = 6;
+  google.protobuf.Timestamp created_at = 7;
+}
+
+message AuthResponse {
+  User user = 1;
+}
+
+message CreateGuestRequest {}
+
+message RegisterRequest {
+  string username = 1;
+  string password = 2;
+  // Optional; required to later use passwordless sign-in.
+  string email = 3;
+  // Optional: upgrade this guest account instead of creating a new one, so a
+  // player who signs up after playing keeps their history and rating.
+  string upgrade_user_id = 4;
+}
+
+message LoginRequest {
+  // Username or email — users should not have to remember which they used.
+  string identifier = 1;
+  string password = 2;
+}
+
+message RequestLoginTokenRequest {
+  string email = 1;
+}
+
+message RequestLoginTokenResponse {
+  // The single-use token. Production emails this to the address and returns
+  // nothing; it is only echoed here when the server runs with token delivery
+  // disabled (no mail provider configured), so local development works.
+  string token = 1;
+  google.protobuf.Timestamp expires_at = 2;
+  // True when the token was returned in-band rather than emailed.
+  bool delivered_in_band = 3;
+}
+
+message RedeemLoginTokenRequest {
+  string token = 1;
+}
+
+message GetUserRequest {
+  string user_id = 1;
+}

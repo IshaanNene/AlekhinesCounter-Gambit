@@ -15,9 +15,12 @@ service GameService {
   rpc GetGame(GetGameRequest) returns (GetGameResponse);
   // Resign ends a game in the opponent's favour.
   rpc Resign(ResignRequest) returns (ResignResponse);
-  // CreateGuest mints an anonymous user so a client can play before real
-  // accounts exist (auth arrives in T2.8).
-  rpc CreateGuest(CreateGuestRequest) returns (CreateGuestResponse);
+  // JoinGame claims the open Black seat of a game awaiting an opponent.
+  rpc JoinGame(JoinGameRequest) returns (JoinGameResponse);
+  // ListGames returns a user's game history, most recent first.
+  rpc ListGames(ListGamesRequest) returns (ListGamesResponse);
+  // Leaderboard returns the highest-rated accounts.
+  rpc Leaderboard(LeaderboardRequest) returns (LeaderboardResponse);
   // LegalMoves lists every legal move in a game's current position. Clients use
   // it to highlight destinations and validate premoves without reimplementing
   // move generation — the rules stay in one place.
@@ -61,6 +64,10 @@ message Game {
   EndReason end_reason = 4;
   // Present when the game is played against the engine.
   bool vs_engine = 5;
+  // True while a human game is still waiting for an opponent.
+  bool awaiting_opponent = 11;
+  // True when the result will move both players' Elo.
+  bool rated = 12;
   string white_id = 6;
   // Empty when vs_engine is true.
   string black_id = 7;
@@ -72,7 +79,8 @@ message Game {
 message CreateGameRequest {
   // Player who owns the white pieces.
   string white_id = 1;
-  // Opponent id; leave empty to play against the engine.
+  // Opponent id. Leave empty for an open seat another player can join; ignored
+  // when vs_engine is true.
   string black_id = 2;
   // Engine search depth for reply moves (used only when playing the engine).
   uint32 engine_depth = 3;
@@ -80,6 +88,11 @@ message CreateGameRequest {
   // session-manager apply its defaults.
   int64 initial_ms = 4;
   int64 increment_ms = 5;
+  // Rated games move both players' Elo on completion. Ignored for engine games.
+  bool rated = 6;
+  // Play against the engine. When false and black_id is empty, the game waits
+  // for an opponent to join — a NULL black_id alone cannot distinguish the two.
+  bool vs_engine = 7;
 }
 
 message CreateGameResponse {
@@ -118,6 +131,16 @@ message ResignResponse {
   Game game = 1;
 }
 
+message JoinGameRequest {
+  string game_id = 1;
+  // The player claiming the Black seat.
+  string player_id = 2;
+}
+
+message JoinGameResponse {
+  Game game = 1;
+}
+
 message LegalMovesRequest {
   string game_id = 1;
 }
@@ -128,9 +151,50 @@ message LegalMovesResponse {
   repeated string uci = 1;
 }
 
-message CreateGuestRequest {}
-
-message CreateGuestResponse {
+message ListGamesRequest {
   string user_id = 1;
-  string username = 2;
+  // Page size; the server clamps this, so a hostile client cannot ask for
+  // everything at once.
+  int32 limit = 2;
+  int32 offset = 3;
+}
+
+// GameSummary is a history row: enough to list a game without its moves.
+message GameSummary {
+  string id = 1;
+  string white_id = 2;
+  string white_name = 3;
+  string black_id = 4;  // empty for engine games
+  string black_name = 5; // "Stockfish" for engine games
+  bool vs_engine = 6;
+  bool rated = 7;
+  Status status = 8;
+  EndReason end_reason = 9;
+  int32 move_count = 10;
+  // Rating change for the requested user. Only meaningful when has_elo_delta.
+  int32 elo_delta = 11;
+  bool has_elo_delta = 12;
+  google.protobuf.Timestamp started_at = 13;
+  google.protobuf.Timestamp ended_at = 14;
+}
+
+message ListGamesResponse {
+  repeated GameSummary games = 1;
+  int32 total = 2;
+}
+
+message LeaderboardRequest {
+  int32 limit = 1;
+}
+
+message LeaderboardEntry {
+  int32 rank = 1;
+  string user_id = 2;
+  string username = 3;
+  int32 elo = 4;
+  int32 games_played = 5;
+}
+
+message LeaderboardResponse {
+  repeated LeaderboardEntry entries = 1;
 }

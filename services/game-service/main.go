@@ -17,6 +17,7 @@ import (
 	"google.golang.org/grpc/reflection"
 
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/config"
+	authv1 "github.com/IshaanNene/AlekhinesCounter-Gambit/proto/gen/go/auth/v1"
 	gamev1 "github.com/IshaanNene/AlekhinesCounter-Gambit/proto/gen/go/game/v1"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/services/game-service/internal/engine"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/services/game-service/internal/server"
@@ -88,6 +89,10 @@ func main() {
 
 	grpcServer := grpc.NewServer()
 	gamev1.RegisterGameServiceServer(grpcServer, server.New(st, eng, sess, log))
+	// Identity lives beside the users table but is a separate service: the
+	// gateway owns sessions, this only verifies credentials.
+	deliverTokens := config.Getenv("ACG_MAIL_ENABLED", "false") == "true"
+	authv1.RegisterAuthServiceServer(grpcServer, server.NewAuth(st, log, deliverTokens))
 
 	healthSrv := health.NewServer()
 	healthSrv.SetServingStatus("", healthv1.HealthCheckResponse_SERVING)
