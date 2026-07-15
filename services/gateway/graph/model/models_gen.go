@@ -79,6 +79,9 @@ type ResignInput struct {
 	PlayerID string `json:"playerId"`
 }
 
+type Subscription struct {
+}
+
 // Why a finished game ended.
 type EndReason string
 

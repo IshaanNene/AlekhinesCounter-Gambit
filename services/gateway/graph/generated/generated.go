@@ -32,6 +32,7 @@ type ResolverRoot interface {
 	Game() GameResolver
 	Mutation() MutationResolver
 	Query() QueryResolver
+	Subscription() SubscriptionResolver
 }
 
 type DirectiveRoot struct {
@@ -75,6 +76,10 @@ type ComplexityRoot struct {
 		Game   func(childComplexity int, id string) int
 		Health func(childComplexity int) int
 	}
+
+	Subscription struct {
+		GameUpdated func(childComplexity int, gameID string) int
+	}
 }
 
 // endregion ***************************** api!.gotpl *****************************
@@ -92,6 +97,9 @@ type MutationResolver interface {
 type QueryResolver interface {
 	Game(ctx context.Context, id string) (*model.Game, error)
 	Health(ctx context.Context) (string, error)
+}
+type SubscriptionResolver interface {
+	GameUpdated(ctx context.Context, gameID string) (<-chan *model.Game, error)
 }
 
 // endregion ************************** generated!.gotpl **************************
@@ -275,6 +283,18 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.Query.Health(childComplexity), true
 
+	case "Subscription.gameUpdated":
+		if e.ComplexityRoot.Subscription.GameUpdated == nil {
+			break
+		}
+
+		args, err := ec.field_Subscription_gameUpdated_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Subscription.GameUpdated(childComplexity, args["gameId"].(string)), true
+
 	}
 	return 0, false
 }
@@ -329,6 +349,23 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 			ctx = graphql.WithUnmarshalerMap(ctx, inputUnmarshalMap)
 			data := ec._Mutation(ctx, opCtx.Operation.SelectionSet)
 			var buf bytes.Buffer
+			data.MarshalGQL(&buf)
+
+			return &graphql.Response{
+				Data: buf.Bytes(),
+			}
+		}
+	case ast.Subscription:
+		next := ec._Subscription(ctx, opCtx.Operation.SelectionSet)
+
+		var buf bytes.Buffer
+		return func(ctx context.Context) *graphql.Response {
+			buf.Reset()
+			data := next(ctx)
+
+			if data == nil {
+				return nil
+			}
 			data.MarshalGQL(&buf)
 
 			return &graphql.Response{
@@ -473,6 +510,15 @@ type Mutation {
   move(input: MoveInput!): Game!
   "Resign, handing the win to the opponent."
   resign(input: ResignInput!): Game!
+}
+
+type Subscription {
+  """
+  Stream a game's state as it changes. Emits the current state immediately on
+  subscribe, then again after every move or result change — so a client (player
+  or spectator) can render a live board without polling.
+  """
+  gameUpdated(gameId: ID!): Game!
 }
 `, BuiltIn: false},
 }
@@ -719,6 +765,20 @@ func (ec *executionContext) field_Query_game_args(ctx context.Context, rawArgs m
 		return nil, err
 	}
 	args["id"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Subscription_gameUpdated_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "gameId",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNID2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["gameId"] = arg0
 	return args, nil
 }
 
@@ -1485,6 +1545,50 @@ func (ec *executionContext) fieldContext_Query___schema(_ context.Context, field
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return ec.childFields___Schema(ctx, field)
 		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Subscription_gameUpdated(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
+	return graphql.ResolveFieldStream(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Subscription_gameUpdated(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Subscription().GameUpdated(ctx, fc.Args["gameId"].(string))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.Game) graphql.Marshaler {
+			return ec.marshalNGame2ᚖgithubᚗcomᚋIshaanNeneᚋAlekhinesCounterᚑGambitᚋservicesᚋgatewayᚋgraphᚋmodelᚐGame(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Subscription_gameUpdated(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Subscription",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_Game(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Subscription_gameUpdated_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
 	}
 	return fc, nil
 }
@@ -3076,6 +3180,26 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 	})
 
 	return out
+}
+
+var subscriptionImplementors = []string{"Subscription"}
+
+func (ec *executionContext) _Subscription(ctx context.Context, sel ast.SelectionSet) func(ctx context.Context) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, subscriptionImplementors)
+	ctx = graphql.WithFieldContext(ctx, &graphql.FieldContext{
+		Object: "Subscription",
+	})
+	if len(fields) != 1 {
+		graphql.AddErrorf(ctx, "must subscribe to exactly one stream")
+		return nil
+	}
+
+	switch fields[0].Name {
+	case "gameUpdated":
+		return ec._Subscription_gameUpdated(ctx, fields[0])
+	default:
+		panic("unknown field " + strconv.Quote(fields[0].Name))
+	}
 }
 
 var __DirectiveImplementors = []string{"__Directive"}

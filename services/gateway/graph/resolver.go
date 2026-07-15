@@ -3,6 +3,7 @@ package graph
 import (
 	"log/slog"
 
+	"github.com/IshaanNene/AlekhinesCounter-Gambit/services/gateway/internal/pubsub"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/services/gateway/internal/upstream"
 )
 
@@ -13,5 +14,6 @@ import (
 // gateway holds no state of its own: every field is resolved over gRPC.
 type Resolver struct {
 	Upstream *upstream.Clients
+	Bus      pubsub.Bus
 	Log      *slog.Logger
 }

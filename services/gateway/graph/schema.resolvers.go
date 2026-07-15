@@ -8,12 +8,11 @@ package graph
 import (
 	"context"
 
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-
 	gamev1 "github.com/IshaanNene/AlekhinesCounter-Gambit/proto/gen/go/game/v1"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/services/gateway/graph/generated"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/services/gateway/graph/model"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // Clock is the resolver for the clock field.
@@ -60,7 +59,9 @@ func (r *mutationResolver) Move(ctx context.Context, input model.MoveInput) (*mo
 	if err != nil {
 		return nil, err
 	}
-	return toModelGame(resp.GetGame()), nil
+	g := toModelGame(resp.GetGame())
+	r.publish(ctx, g)
+	return g, nil
 }
 
 // Resign is the resolver for the resign field.
@@ -72,7 +73,9 @@ func (r *mutationResolver) Resign(ctx context.Context, input model.ResignInput) 
 	if err != nil {
 		return nil, err
 	}
-	return toModelGame(resp.GetGame()), nil
+	g := toModelGame(resp.GetGame())
+	r.publish(ctx, g)
+	return g, nil
 }
 
 // Game is the resolver for the game field. An unknown id resolves to null
@@ -93,6 +96,49 @@ func (r *queryResolver) Health(ctx context.Context) (string, error) {
 	return "ok", nil
 }
 
+// GameUpdated is the resolver for the gameUpdated field.
+//
+// Emits the game's current state immediately so a joining client renders a board
+// straight away, then forwards every subsequent update published by the move and
+// resign mutations. The channel closes when the client disconnects (ctx done).
+func (r *subscriptionResolver) GameUpdated(ctx context.Context, gameID string) (<-chan *model.Game, error) {
+	updates, err := r.Bus.Subscribe(ctx, gameID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Fetch the current state before relaying, so a late joiner is not blank
+	// until the next move. A missing game is a hard error here (unlike the
+	// nullable `game` query): subscribing to nothing is a client mistake.
+	current, err := r.Upstream.Game.GetGame(ctx, &gamev1.GetGameRequest{GameId: gameID})
+	if err != nil {
+		return nil, err
+	}
+
+	out := make(chan *model.Game, 1)
+	out <- toModelGame(current.GetGame())
+
+	go func() {
+		defer close(out)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case g, ok := <-updates:
+				if !ok {
+					return
+				}
+				select {
+				case out <- g:
+				case <-ctx.Done():
+					return
+				}
+			}
+		}
+	}()
+	return out, nil
+}
+
 // Game returns generated.GameResolver implementation.
 func (r *Resolver) Game() generated.GameResolver { return &gameResolver{r} }
 
@@ -102,22 +148,12 @@ func (r *Resolver) Mutation() generated.MutationResolver { return &mutationResol
 // Query returns generated.QueryResolver implementation.
 func (r *Resolver) Query() generated.QueryResolver { return &queryResolver{r} }
 
-type gameResolver struct{ *Resolver }
-type mutationResolver struct{ *Resolver }
-type queryResolver struct{ *Resolver }
+// Subscription returns generated.SubscriptionResolver implementation.
+func (r *Resolver) Subscription() generated.SubscriptionResolver { return &subscriptionResolver{r} }
 
-// deref returns the pointed-to string, or "" for nil (the proto zero value the
-// backends already treat as "unset").
-func deref(s *string) string {
-	if s == nil {
-		return ""
-	}
-	return *s
-}
-
-func derefInt(i *int) int {
-	if i == nil {
-		return 0
-	}
-	return *i
-}
+type (
+	gameResolver         struct{ *Resolver }
+	mutationResolver     struct{ *Resolver }
+	queryResolver        struct{ *Resolver }
+	subscriptionResolver struct{ *Resolver }
+)

@@ -17,11 +17,13 @@ import (
 	"github.com/99designs/gqlgen/graphql/handler/lru"
 	"github.com/99designs/gqlgen/graphql/handler/transport"
 	"github.com/99designs/gqlgen/graphql/playground"
+	coderws "github.com/coder/websocket"
 	"github.com/vektah/gqlparser/v2/ast"
 
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/config"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/services/gateway/graph"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/services/gateway/graph/generated"
+	"github.com/IshaanNene/AlekhinesCounter-Gambit/services/gateway/internal/pubsub"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/services/gateway/internal/upstream"
 )
 
@@ -44,10 +46,18 @@ func main() {
 	}
 	defer clients.Close()
 
-	srv := newGraphQLServer(&graph.Resolver{Upstream: clients, Log: log})
+	// In-process fanout. T2.7 swaps this for Redis so updates reach clients
+	// holding sockets on any gateway replica.
+	bus := pubsub.NewMemory()
+	defer bus.Close()
+
+	srv := newGraphQLServer(&graph.Resolver{Upstream: clients, Bus: bus, Log: log})
 
 	mux := http.NewServeMux()
 	mux.Handle("/graphql", srv)
+	// Same handler: it serves POST queries and upgrades WebSocket subscriptions.
+	// /ws is the documented subscription endpoint.
+	mux.Handle("/ws", srv)
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
@@ -89,6 +99,16 @@ func newGraphQLServer(resolver *graph.Resolver) *handler.Server {
 	srv.AddTransport(transport.Options{})
 	srv.AddTransport(transport.GET{})
 	srv.AddTransport(transport.POST{})
+	srv.AddTransport(transport.Websocket{
+		Implementation: transport.CoderWebsocketImplementation{
+			AcceptOptions: coderws.AcceptOptions{
+				// The web client is served from a different origin in dev. Tighten
+				// this to the real origin list before exposing the gateway publicly.
+				InsecureSkipVerify: true,
+			},
+		},
+		KeepAlivePingInterval: 10 * time.Second,
+	})
 	srv.SetQueryCache(lru.New[*ast.QueryDocument](1000))
 	srv.Use(extension.Introspection{})
 	return srv

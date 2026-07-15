@@ -111,3 +111,12 @@ type Mutation {
   "Resign, handing the win to the opponent."
   resign(input: ResignInput!): Game!
 }
+
+type Subscription {
+  """
+  Stream a game's state as it changes. Emits the current state immediately on
+  subscribe, then again after every move or result change — so a client (player
+  or spectator) can render a live board without polling.
+  """
+  gameUpdated(gameId: ID!): Game!
+}
