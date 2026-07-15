@@ -1,0 +1,100 @@
+syntax = "proto3";
+
+package alekhine.game.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// GameService is the authoritative source of game state: it validates moves,
+// persists them, and (for games against the engine) produces the reply move.
+service GameService {
+  // CreateGame starts a new game and returns it in its initial state.
+  rpc CreateGame(CreateGameRequest) returns (CreateGameResponse);
+  // SubmitMove validates and applies a move, returning the updated game.
+  rpc SubmitMove(SubmitMoveRequest) returns (SubmitMoveResponse);
+  // GetGame returns a game and its full move list.
+  rpc GetGame(GetGameRequest) returns (GetGameResponse);
+}
+
+// Status is the lifecycle state / result of a game.
+enum Status {
+  STATUS_UNSPECIFIED = 0;
+  STATUS_IN_PROGRESS = 1;
+  STATUS_WHITE_WON = 2;
+  STATUS_BLACK_WON = 3;
+  STATUS_DRAW = 4;
+}
+
+// How a finished game ended (unset while in progress).
+enum EndReason {
+  END_REASON_UNSPECIFIED = 0;
+  END_REASON_CHECKMATE = 1;
+  END_REASON_STALEMATE = 2;
+  END_REASON_INSUFFICIENT_MATERIAL = 3;
+  END_REASON_FIFTY_MOVE = 4;
+  END_REASON_THREEFOLD = 5;
+  END_REASON_RESIGNATION = 6;
+}
+
+message Move {
+  // Half-move number, starting at 1.
+  uint32 ply = 1;
+  // Move in UCI long algebraic notation.
+  string uci = 2;
+  // Resulting position after the move, in FEN.
+  string fen_after = 3;
+}
+
+message Game {
+  string id = 1;
+  // Current position in FEN.
+  string fen = 2;
+  Status status = 3;
+  EndReason end_reason = 4;
+  // Present when the game is played against the engine.
+  bool vs_engine = 5;
+  string white_id = 6;
+  // Empty when vs_engine is true.
+  string black_id = 7;
+  repeated Move moves = 8;
+  google.protobuf.Timestamp started_at = 9;
+  google.protobuf.Timestamp ended_at = 10;
+}
+
+message CreateGameRequest {
+  // Player who owns the white pieces.
+  string white_id = 1;
+  // Opponent id; leave empty to play against the engine.
+  string black_id = 2;
+  // Engine search depth for reply moves (used only when playing the engine).
+  uint32 engine_depth = 3;
+  // Time control for the live session (human-vs-human games). Zero lets the
+  // session-manager apply its defaults.
+  int64 initial_ms = 4;
+  int64 increment_ms = 5;
+}
+
+message CreateGameResponse {
+  Game game = 1;
+}
+
+message SubmitMoveRequest {
+  string game_id = 1;
+  // Move in UCI long algebraic notation.
+  string uci = 2;
+  // Player making the move. Required for human-vs-human games, where it is
+  // checked against the side to move; optional for games against the engine.
+  string player_id = 3;
+}
+
+message SubmitMoveResponse {
+  // Updated game, including the engine's reply move when applicable.
+  Game game = 1;
+}
+
+message GetGameRequest {
+  string game_id = 1;
+}
+
+message GetGameResponse {
+  Game game = 1;
+}

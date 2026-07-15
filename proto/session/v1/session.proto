@@ -1,0 +1,79 @@
+syntax = "proto3";
+
+package alekhine.session.v1;
+
+// SessionService manages live game sessions: turn, chess clocks, presence, and
+// reconnect/abandonment. It is implemented by the Erlang session-manager and
+// called by the Go game-service and gateway. Move *legality* and durable history
+// remain in the game-service; this service owns ephemeral session state.
+service SessionService {
+  // CreateSession starts a live session for a game.
+  rpc CreateSession(CreateSessionRequest) returns (Snapshot);
+  // Join marks a player as connected (e.g. after (re)loading the board).
+  rpc Join(PlayerRef) returns (Snapshot);
+  // MoveMade tells the session a player completed a (already-validated) move so
+  // it can switch the turn and apply the clock.
+  rpc MoveMade(PlayerRef) returns (Snapshot);
+  // Disconnect starts the grace window for a player.
+  rpc Disconnect(PlayerRef) returns (Snapshot);
+  // Reconnect cancels the grace window for a player.
+  rpc Reconnect(PlayerRef) returns (Snapshot);
+  // Resign ends the game in the opponent's favor.
+  rpc Resign(PlayerRef) returns (Snapshot);
+  // EndSession closes a session because the *game* ended for a chess reason the
+  // session cannot see (checkmate, stalemate, draw). Without this the session's
+  // clocks would keep running on a finished game and eventually flag-fall.
+  rpc EndSession(EndSessionRequest) returns (Snapshot);
+  // GetSnapshot returns the current session state.
+  rpc GetSnapshot(GameRef) returns (Snapshot);
+}
+
+enum Side {
+  SIDE_UNSPECIFIED = 0;
+  SIDE_WHITE = 1;
+  SIDE_BLACK = 2;
+}
+
+enum SessionStatus {
+  SESSION_STATUS_UNSPECIFIED = 0;
+  SESSION_STATUS_IN_PROGRESS = 1;
+  SESSION_STATUS_FINISHED = 2;
+}
+
+message CreateSessionRequest {
+  string game_id = 1;
+  string white_id = 2;
+  string black_id = 3; // empty for a game vs the engine
+  int64 initial_ms = 4;
+  int64 increment_ms = 5;
+  int64 grace_ms = 6;
+}
+
+message PlayerRef {
+  string game_id = 1;
+  string player_id = 2;
+}
+
+message GameRef {
+  string game_id = 1;
+}
+
+message EndSessionRequest {
+  string game_id = 1;
+  // Winning side; SIDE_UNSPECIFIED for a draw.
+  Side winner = 2;
+  // Why the game ended, e.g. "checkmate", "stalemate", "fifty_move".
+  string reason = 3;
+}
+
+message Snapshot {
+  string game_id = 1;
+  SessionStatus status = 2;
+  Side turn = 3;
+  int64 white_ms = 4; // milliseconds left on White's clock
+  int64 black_ms = 5; // milliseconds left on Black's clock
+  Side winner = 6;    // SIDE_UNSPECIFIED while in progress or on a draw
+  string reason = 7;  // e.g. "flag", "resignation", "abandonment"
+  repeated string spectators = 8;
+  string error = 9;   // set when a request could not be applied (e.g. "not_your_turn")
+}

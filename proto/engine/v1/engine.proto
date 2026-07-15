@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+package alekhine.engine.v1;
+
+// EngineService wraps a chess engine (Stockfish over UCI). Implementations are
+// stateless: any request may be routed to any replica.
+service EngineService {
+  // Analyze evaluates a position and returns the engine's best move.
+  rpc Analyze(AnalyzeRequest) returns (AnalyzeResponse);
+}
+
+message AnalyzeRequest {
+  // Position to analyze, in Forsyth-Edwards Notation.
+  string fen = 1;
+  // Search to this fixed depth (plies). Ignored if zero.
+  uint32 depth = 2;
+  // Search for at most this many milliseconds. Ignored if zero.
+  uint32 movetime_ms = 3;
+}
+
+message AnalyzeResponse {
+  // Best move in UCI long algebraic notation (e.g. "e2e4", "e7e8q").
+  string bestmove = 1;
+  // Score in centipawns from the side-to-move's perspective (valid when mate is false).
+  int32 score_cp = 2;
+  // True when the score represents a forced mate.
+  bool mate = 3;
+  // Moves until mate when mate is true (positive = side-to-move mates).
+  int32 mate_in = 4;
+  // Depth actually reached.
+  uint32 depth = 5;
+  // Principal variation in UCI notation.
+  repeated string pv = 6;
+}
