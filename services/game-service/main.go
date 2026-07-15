@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net"
 	"os"
@@ -17,6 +18,7 @@ import (
 	"google.golang.org/grpc/reflection"
 
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/config"
+	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/redisx"
 	authv1 "github.com/IshaanNene/AlekhinesCounter-Gambit/proto/gen/go/auth/v1"
 	gamev1 "github.com/IshaanNene/AlekhinesCounter-Gambit/proto/gen/go/game/v1"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/services/game-service/internal/engine"
@@ -48,6 +50,8 @@ func main() {
 	addr := config.Getenv("ACG_GAME_ADDR", ":50051")
 	dsn := config.Getenv("ACG_POSTGRES_DSN", "postgres://acg:acg@localhost:5433/acg?sslmode=disable")
 	engineAddr := config.Getenv("ACG_ENGINE_ADDR", "localhost:50052")
+	// Empty disables the evaluation cache; the engine is then asked every time.
+	redisAddr := config.Getenv("ACG_REDIS_ADDR", "")
 	// Empty disables live sessions (engine-only games still work).
 	sessionAddr := config.Getenv("ACG_SESSION_ADDR", "")
 
@@ -67,12 +71,34 @@ func main() {
 	}
 	defer st.Close()
 
-	eng, err := engine.Dial(engineAddr)
+	// Redis is a cache, not a dependency: log and carry on if it is unreachable.
+	rdb, err := redisx.Dial(ctx, redisAddr)
+	if err != nil {
+		log.Warn("redis unavailable — evaluation cache disabled", "addr", redisAddr, "error", err)
+	}
+	if rdb != nil {
+		defer rdb.Close()
+	}
+	evalCache := redisx.NewEvalCache(rdb)
+
+	eng, err := engine.Dial(engineAddr, evalCache, log)
 	if err != nil {
 		log.Error("failed to dial engine-worker", "addr", engineAddr, "error", err)
 		os.Exit(1)
 	}
 	defer eng.Close()
+
+	// Periodically report cache effectiveness; Q4 turns these into Prometheus
+	// counters, but a log line is enough to see it working today.
+	go func() {
+		for range time.Tick(60 * time.Second) {
+			hits, misses, rate := eng.CacheStats()
+			if hits+misses > 0 {
+				log.Info("eval cache", "hits", hits, "misses", misses,
+					"hit_rate", fmt.Sprintf("%.1f%%", rate*100))
+			}
+		}
+	}()
 
 	sess, err := session.Dial(sessionAddr, log)
 	if err != nil {
@@ -108,7 +134,8 @@ func main() {
 	}()
 
 	log.Info("game-service started", "version", version, "addr", addr,
-		"engine", engineAddr, "session", sessionAddr, "session_enabled", sess.Enabled())
+		"engine", engineAddr, "session", sessionAddr, "session_enabled", sess.Enabled(),
+		"eval_cache", evalCache.Enabled())
 	if err := grpcServer.Serve(lis); err != nil {
 		log.Error("grpc serve failed", "error", err)
 		os.Exit(1)

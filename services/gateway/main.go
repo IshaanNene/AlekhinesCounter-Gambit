@@ -18,9 +18,11 @@ import (
 	"github.com/99designs/gqlgen/graphql/handler/transport"
 	"github.com/99designs/gqlgen/graphql/playground"
 	coderws "github.com/coder/websocket"
+	"github.com/redis/go-redis/v9"
 	"github.com/vektah/gqlparser/v2/ast"
 
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/config"
+	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/redisx"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/services/gateway/graph"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/services/gateway/graph/generated"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/services/gateway/internal/auth"
@@ -39,6 +41,8 @@ func main() {
 	addr := config.Getenv("ACG_GATEWAY_ADDR", ":8080")
 	gameAddr := config.Getenv("ACG_GAME_ADDR_CLIENT", "localhost:50051")
 	sessionAddr := config.Getenv("ACG_SESSION_ADDR", "")
+	// Empty falls back to in-process fanout and no rate limiting (single replica).
+	redisAddr := config.Getenv("ACG_REDIS_ADDR", "")
 
 	// Fail fast on a missing secret rather than silently minting forgeable
 	// sessions with a default one.
@@ -61,19 +65,37 @@ func main() {
 	}
 	defer clients.Close()
 
-	// In-process fanout. T2.7 swaps this for Redis so updates reach clients
-	// holding sockets on any gateway replica.
-	bus := pubsub.NewMemory()
+	// Redis carries updates between gateway replicas. Without it we fall back to
+	// in-process fanout, which is correct for exactly one replica: a move handled
+	// here would never reach a socket held by another.
+	rdb, err := redisx.Dial(context.Background(), redisAddr)
+	if err != nil {
+		log.Warn("redis unavailable — falling back to in-process fanout and no rate limiting",
+			"addr", redisAddr, "error", err)
+	}
+	if rdb != nil {
+		defer rdb.Close()
+	}
+
+	var bus pubsub.Bus
+	if rdb != nil {
+		bus = pubsub.NewRedis(rdb, log)
+	} else {
+		bus = pubsub.NewMemory()
+	}
 	defer bus.Close()
+
+	// 20 requests/second sustained, bursting to 60: comfortably above a human
+	// playing chess, low enough to blunt a script.
+	limiter := redisx.NewLimiter(rdb, 20, 60)
 
 	srv := newGraphQLServer(&graph.Resolver{
 		Upstream: clients, Bus: bus, Signer: signer, Log: log,
 	})
 
-	// The auth middleware wraps the GraphQL endpoints only: it attaches the
-	// caller's identity (when present) and the ResponseWriter used to set the
-	// session cookie.
-	authed := signer.Middleware(srv)
+	// Order matters: auth runs first so the limiter can key on the user id and
+	// only fall back to IP for anonymous callers.
+	authed := signer.Middleware(auth.RateLimitMiddleware(limiter)(srv))
 
 	mux := http.NewServeMux()
 	mux.Handle("/graphql", authed)
@@ -108,11 +130,21 @@ func main() {
 	}()
 
 	log.Info("gateway started", "version", version, "addr", addr,
-		"game", gameAddr, "session", sessionAddr, "session_enabled", clients.SessionEnabled())
+		"game", gameAddr, "session", sessionAddr, "session_enabled", clients.SessionEnabled(),
+		"redis", redisAddr, "fanout", fanoutKind(rdb))
 	if err := httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Error("http serve failed", "error", err)
 		os.Exit(1)
 	}
+}
+
+// fanoutKind names the bus in the startup log, so it is obvious at a glance
+// whether this process can serve more than one replica.
+func fanoutKind(rdb *redis.Client) string {
+	if rdb != nil {
+		return "redis"
+	}
+	return "in-process"
 }
 
 // newGraphQLServer builds the gqlgen handler with the transports we support.
