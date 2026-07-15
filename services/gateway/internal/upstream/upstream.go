@@ -9,6 +9,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
+	authv1 "github.com/IshaanNene/AlekhinesCounter-Gambit/proto/gen/go/auth/v1"
 	gamev1 "github.com/IshaanNene/AlekhinesCounter-Gambit/proto/gen/go/game/v1"
 	sessionv1 "github.com/IshaanNene/AlekhinesCounter-Gambit/proto/gen/go/session/v1"
 )
@@ -16,6 +17,7 @@ import (
 // Clients bundles the upstream services the gateway talks to.
 type Clients struct {
 	Game    gamev1.GameServiceClient
+	Auth    authv1.AuthServiceClient
 	Session sessionv1.SessionServiceClient
 
 	conns []*grpc.ClientConn
@@ -33,6 +35,9 @@ func Dial(gameAddr, sessionAddr string) (*Clients, error) {
 	}
 	c.conns = append(c.conns, gameConn)
 	c.Game = gamev1.NewGameServiceClient(gameConn)
+	// AuthService lives in the same process as GameService, so it shares the
+	// connection rather than opening a second one to the same address.
+	c.Auth = authv1.NewAuthServiceClient(gameConn)
 
 	if sessionAddr != "" {
 		sessionConn, err := grpc.NewClient(sessionAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))

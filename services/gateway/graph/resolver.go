@@ -3,6 +3,7 @@ package graph
 import (
 	"log/slog"
 
+	"github.com/IshaanNene/AlekhinesCounter-Gambit/services/gateway/internal/auth"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/services/gateway/internal/pubsub"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/services/gateway/internal/upstream"
 )
@@ -15,5 +16,6 @@ import (
 type Resolver struct {
 	Upstream *upstream.Clients
 	Bus      pubsub.Bus
+	Signer   *auth.Signer
 	Log      *slog.Logger
 }

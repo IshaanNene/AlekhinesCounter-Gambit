@@ -23,6 +23,7 @@ import (
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/config"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/services/gateway/graph"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/services/gateway/graph/generated"
+	"github.com/IshaanNene/AlekhinesCounter-Gambit/services/gateway/internal/auth"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/services/gateway/internal/pubsub"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/services/gateway/internal/upstream"
 )
@@ -39,6 +40,20 @@ func main() {
 	gameAddr := config.Getenv("ACG_GAME_ADDR_CLIENT", "localhost:50051")
 	sessionAddr := config.Getenv("ACG_SESSION_ADDR", "")
 
+	// Fail fast on a missing secret rather than silently minting forgeable
+	// sessions with a default one.
+	secret := config.Getenv("ACG_SESSION_SECRET", "")
+	if secret == "" {
+		log.Error("ACG_SESSION_SECRET is required (32+ bytes)")
+		os.Exit(1)
+	}
+	signer, err := auth.NewSigner(secret, auth.DefaultTTL,
+		config.Getenv("ACG_COOKIE_SECURE", "false") == "true")
+	if err != nil {
+		log.Error("invalid session secret", "error", err)
+		os.Exit(1)
+	}
+
 	clients, err := upstream.Dial(gameAddr, sessionAddr)
 	if err != nil {
 		log.Error("failed to dial upstream services", "error", err)
@@ -51,13 +66,20 @@ func main() {
 	bus := pubsub.NewMemory()
 	defer bus.Close()
 
-	srv := newGraphQLServer(&graph.Resolver{Upstream: clients, Bus: bus, Log: log})
+	srv := newGraphQLServer(&graph.Resolver{
+		Upstream: clients, Bus: bus, Signer: signer, Log: log,
+	})
+
+	// The auth middleware wraps the GraphQL endpoints only: it attaches the
+	// caller's identity (when present) and the ResponseWriter used to set the
+	// session cookie.
+	authed := signer.Middleware(srv)
 
 	mux := http.NewServeMux()
-	mux.Handle("/graphql", srv)
+	mux.Handle("/graphql", authed)
 	// Same handler: it serves POST queries and upgrades WebSocket subscriptions.
 	// /ws is the documented subscription endpoint.
-	mux.Handle("/ws", srv)
+	mux.Handle("/ws", authed)
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))

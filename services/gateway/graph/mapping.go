@@ -12,13 +12,15 @@ func toModelGame(g *gamev1.Game) *model.Game {
 		return nil
 	}
 	out := &model.Game{
-		ID:        g.GetId(),
-		Fen:       g.GetFen(),
-		Status:    toModelStatus(g.GetStatus()),
-		VsEngine:  g.GetVsEngine(),
-		WhiteID:   g.GetWhiteId(),
-		Moves:     make([]*model.Move, 0, len(g.GetMoves())),
-		StartedAt: g.GetStartedAt().AsTime(),
+		ID:               g.GetId(),
+		Fen:              g.GetFen(),
+		Status:           toModelStatus(g.GetStatus()),
+		VsEngine:         g.GetVsEngine(),
+		AwaitingOpponent: g.GetAwaitingOpponent(),
+		Rated:            g.GetRated(),
+		WhiteID:          g.GetWhiteId(),
+		Moves:            make([]*model.Move, 0, len(g.GetMoves())),
+		StartedAt:        g.GetStartedAt().AsTime(),
 	}
 	if b := g.GetBlackId(); b != "" {
 		out.BlackID = &b
@@ -86,6 +88,38 @@ func toModelClock(s *sessionv1.Snapshot) *model.Clock {
 		Turn:    toModelSide(s.GetTurn()),
 		Running: s.GetStatus() == sessionv1.SessionStatus_SESSION_STATUS_IN_PROGRESS,
 	}
+}
+
+// toModelSummary converts a history row to the GraphQL model.
+func toModelSummary(g *gamev1.GameSummary) *model.GameSummary {
+	if g == nil {
+		return nil
+	}
+	out := &model.GameSummary{
+		ID:        g.GetId(),
+		WhiteID:   g.GetWhiteId(),
+		WhiteName: g.GetWhiteName(),
+		BlackName: g.GetBlackName(),
+		VsEngine:  g.GetVsEngine(),
+		Rated:     g.GetRated(),
+		Status:    toModelStatus(g.GetStatus()),
+		MoveCount: int(g.GetMoveCount()),
+		StartedAt: g.GetStartedAt().AsTime(),
+	}
+	if b := g.GetBlackId(); b != "" {
+		out.BlackID = &b
+	}
+	out.EndReason = toModelEndReason(g.GetEndReason())
+	// has_elo_delta distinguishes "unrated / not scored" from a genuine zero.
+	if g.GetHasEloDelta() {
+		d := int(g.GetEloDelta())
+		out.EloDelta = &d
+	}
+	if g.GetEndedAt() != nil {
+		t := g.GetEndedAt().AsTime()
+		out.EndedAt = &t
+	}
+	return out
 }
 
 func toModelSide(s sessionv1.Side) model.Side {

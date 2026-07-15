@@ -22,15 +22,17 @@ type Clock struct {
 }
 
 type CreateGameInput struct {
-	// Omit to have the server mint a guest user.
-	WhiteID *string `json:"whiteId,omitempty"`
-	// Omit to play against the engine.
+	// Play Stockfish. When false the game waits for an opponent to join.
+	VsEngine *bool `json:"vsEngine,omitempty"`
+	// Invite a specific opponent. Omit to leave the seat open to anyone.
 	BlackID *string `json:"blackId,omitempty"`
 	// Engine search depth for replies; 0 uses the worker default.
 	EngineDepth *int `json:"engineDepth,omitempty"`
 	// Time control for live sessions; 0 uses the session-manager defaults.
 	InitialMs   *int `json:"initialMs,omitempty"`
 	IncrementMs *int `json:"incrementMs,omitempty"`
+	// Rated games move both players' Elo on completion. Ignored for engine games.
+	Rated *bool `json:"rated,omitempty"`
 }
 
 type Game struct {
@@ -40,8 +42,12 @@ type Game struct {
 	Status    GameStatus `json:"status"`
 	EndReason *EndReason `json:"endReason,omitempty"`
 	VsEngine  bool       `json:"vsEngine"`
-	WhiteID   string     `json:"whiteId"`
-	// Null when playing the engine.
+	// True while a human game is still waiting for an opponent to join.
+	AwaitingOpponent bool `json:"awaitingOpponent"`
+	// True when the result will move both players' Elo.
+	Rated   bool   `json:"rated"`
+	WhiteID string `json:"whiteId"`
+	// Null when playing the engine, or until an opponent joins.
 	BlackID   *string    `json:"blackId,omitempty"`
 	Moves     []*Move    `json:"moves"`
 	StartedAt time.Time  `json:"startedAt"`
@@ -50,10 +56,51 @@ type Game struct {
 	Clock *Clock `json:"clock,omitempty"`
 }
 
-// An anonymous player identity, until real accounts land.
-type Guest struct {
-	ID       string `json:"id"`
-	Username string `json:"username"`
+type GameHistory struct {
+	Games []*GameSummary `json:"games"`
+	Total int            `json:"total"`
+}
+
+// A finished or ongoing game, summarised for history lists.
+type GameSummary struct {
+	ID        string     `json:"id"`
+	WhiteID   string     `json:"whiteId"`
+	WhiteName string     `json:"whiteName"`
+	BlackID   *string    `json:"blackId,omitempty"`
+	BlackName string     `json:"blackName"`
+	VsEngine  bool       `json:"vsEngine"`
+	Rated     bool       `json:"rated"`
+	Status    GameStatus `json:"status"`
+	EndReason *EndReason `json:"endReason,omitempty"`
+	MoveCount int        `json:"moveCount"`
+	// Your rating change for this game; null when unrated or not yet scored.
+	EloDelta  *int       `json:"eloDelta,omitempty"`
+	StartedAt time.Time  `json:"startedAt"`
+	EndedAt   *time.Time `json:"endedAt,omitempty"`
+}
+
+type LeaderboardEntry struct {
+	Rank        int    `json:"rank"`
+	UserID      string `json:"userId"`
+	Username    string `json:"username"`
+	Elo         int    `json:"elo"`
+	GamesPlayed int    `json:"gamesPlayed"`
+}
+
+type LoginInput struct {
+	// Username or email — either works.
+	Identifier string `json:"identifier"`
+	Password   string `json:"password"`
+}
+
+// Issued when requesting a passwordless sign-in link.
+type LoginTokenRequest struct {
+	// The one-time token, returned only when no mail provider is configured (local
+	// development). In production this is null and the token is emailed.
+	Token     *string    `json:"token,omitempty"`
+	ExpiresAt *time.Time `json:"expiresAt,omitempty"`
+	// True when the token was returned here instead of being emailed.
+	DeliveredInBand bool `json:"deliveredInBand"`
 }
 
 // A single half-move.
@@ -70,8 +117,6 @@ type MoveInput struct {
 	GameID string `json:"gameId"`
 	// Move in UCI long algebraic notation.
 	Uci string `json:"uci"`
-	// Required for human-vs-human games; checked against the side to move.
-	PlayerID *string `json:"playerId,omitempty"`
 }
 
 type Mutation struct {
@@ -80,12 +125,42 @@ type Mutation struct {
 type Query struct {
 }
 
+type RegisterInput struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+	// Optional, but required later for passwordless sign-in.
+	Email *string `json:"email,omitempty"`
+	// Upgrade your current guest account instead of creating a new one, so games and
+	// rating earned before signing up are kept.
+	UpgradeCurrentGuest *bool `json:"upgradeCurrentGuest,omitempty"`
+}
+
 type ResignInput struct {
-	GameID   string `json:"gameId"`
-	PlayerID string `json:"playerId"`
+	GameID string `json:"gameId"`
+}
+
+// The result of signing in. The session is also set as an httpOnly cookie, which
+// is what the web client relies on; `token` is returned for non-browser clients
+// that cannot hold cookies.
+type Session struct {
+	User      *User     `json:"user"`
+	Token     string    `json:"token"`
+	ExpiresAt time.Time `json:"expiresAt"`
 }
 
 type Subscription struct {
+}
+
+// A player account. Guests are real accounts with no credentials attached.
+type User struct {
+	ID       string `json:"id"`
+	Username string `json:"username"`
+	// Only present on your own account.
+	Email       *string   `json:"email,omitempty"`
+	Elo         int       `json:"elo"`
+	IsGuest     bool      `json:"isGuest"`
+	GamesPlayed int       `json:"gamesPlayed"`
+	CreatedAt   time.Time `json:"createdAt"`
 }
 
 // Why a finished game ended.

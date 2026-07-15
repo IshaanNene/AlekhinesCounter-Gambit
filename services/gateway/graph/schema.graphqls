@@ -62,8 +62,12 @@ type Game {
   status: GameStatus!
   endReason: EndReason
   vsEngine: Boolean!
+  "True while a human game is still waiting for an opponent to join."
+  awaitingOpponent: Boolean!
+  "True when the result will move both players' Elo."
+  rated: Boolean!
   whiteId: ID!
-  "Null when playing the engine."
+  "Null when playing the engine, or until an opponent joins."
   blackId: ID
   moves: [Move!]!
   startedAt: Time!
@@ -73,6 +77,14 @@ type Game {
 }
 
 type Query {
+  "The signed-in account, or null when signed out."
+  me: User
+  "A public profile."
+  user(id: ID!): User
+  "A user's game history, most recent first. Defaults to your own."
+  gameHistory(userId: ID, limit: Int, offset: Int): GameHistory!
+  "Highest-rated accounts. Guests are excluded."
+  leaderboard(limit: Int): [LeaderboardEntry!]!
   "Fetch a game and its full move list."
   game(id: ID!): Game
   """
@@ -86,44 +98,137 @@ type Query {
 }
 
 input CreateGameInput {
-  "Omit to have the server mint a guest user."
-  whiteId: ID
-  "Omit to play against the engine."
+  "Play Stockfish. When false the game waits for an opponent to join."
+  vsEngine: Boolean
+  "Invite a specific opponent. Omit to leave the seat open to anyone."
   blackId: ID
   "Engine search depth for replies; 0 uses the worker default."
   engineDepth: Int
   "Time control for live sessions; 0 uses the session-manager defaults."
   initialMs: Int
   incrementMs: Int
+  "Rated games move both players' Elo on completion. Ignored for engine games."
+  rated: Boolean
 }
 
 input MoveInput {
   gameId: ID!
   "Move in UCI long algebraic notation."
   uci: String!
-  "Required for human-vs-human games; checked against the side to move."
-  playerId: ID
 }
 
 input ResignInput {
   gameId: ID!
-  playerId: ID!
 }
 
-"An anonymous player identity, until real accounts land."
-type Guest {
+"A player account. Guests are real accounts with no credentials attached."
+type User {
   id: ID!
   username: String!
+  "Only present on your own account."
+  email: String
+  elo: Int!
+  isGuest: Boolean!
+  gamesPlayed: Int!
+  createdAt: Time!
+}
+
+"""
+The result of signing in. The session is also set as an httpOnly cookie, which
+is what the web client relies on; `token` is returned for non-browser clients
+that cannot hold cookies.
+"""
+type Session {
+  user: User!
+  token: String!
+  expiresAt: Time!
+}
+
+"A finished or ongoing game, summarised for history lists."
+type GameSummary {
+  id: ID!
+  whiteId: ID!
+  whiteName: String!
+  blackId: ID
+  blackName: String!
+  vsEngine: Boolean!
+  rated: Boolean!
+  status: GameStatus!
+  endReason: EndReason
+  moveCount: Int!
+  "Your rating change for this game; null when unrated or not yet scored."
+  eloDelta: Int
+  startedAt: Time!
+  endedAt: Time
+}
+
+type GameHistory {
+  games: [GameSummary!]!
+  total: Int!
+}
+
+type LeaderboardEntry {
+  rank: Int!
+  userId: ID!
+  username: String!
+  elo: Int!
+  gamesPlayed: Int!
+}
+
+"Issued when requesting a passwordless sign-in link."
+type LoginTokenRequest {
+  """
+  The one-time token, returned only when no mail provider is configured (local
+  development). In production this is null and the token is emailed.
+  """
+  token: String
+  expiresAt: Time
+  "True when the token was returned here instead of being emailed."
+  deliveredInBand: Boolean!
+}
+
+input RegisterInput {
+  username: String!
+  password: String!
+  "Optional, but required later for passwordless sign-in."
+  email: String
+  """
+  Upgrade your current guest account instead of creating a new one, so games and
+  rating earned before signing up are kept.
+  """
+  upgradeCurrentGuest: Boolean
+}
+
+input LoginInput {
+  "Username or email — either works."
+  identifier: String!
+  password: String!
 }
 
 type Mutation {
-  "Mint an anonymous player identity so a client can start playing."
-  createGuest: Guest!
+  """
+  Sign in as a guest: no details, playable immediately. Creates an account and a
+  session in one step.
+  """
+  loginAsGuest: Session!
+  "Create a password account (or upgrade your guest) and sign in."
+  register(input: RegisterInput!): Session!
+  "Sign in with username-or-email and password."
+  login(input: LoginInput!): Session!
+  "Request a one-time passwordless sign-in token for an email address."
+  requestLoginToken(email: String!): LoginTokenRequest!
+  "Exchange a one-time token for a session."
+  redeemLoginToken(token: String!): Session!
+  "Clear the current session."
+  logout: Boolean!
+
   createGame(input: CreateGameInput!): Game!
   "Submit a move. Errors if illegal or out of turn."
   move(input: MoveInput!): Game!
   "Resign, handing the win to the opponent."
   resign(input: ResignInput!): Game!
+  "Claim the open Black seat of a game that is waiting for an opponent."
+  joinGame(gameId: ID!): Game!
 }
 
 type Subscription {

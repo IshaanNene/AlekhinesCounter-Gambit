@@ -8,9 +8,11 @@ package graph
 import (
 	"context"
 
+	authv1 "github.com/IshaanNene/AlekhinesCounter-Gambit/proto/gen/go/auth/v1"
 	gamev1 "github.com/IshaanNene/AlekhinesCounter-Gambit/proto/gen/go/game/v1"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/services/gateway/graph/generated"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/services/gateway/graph/model"
+	"github.com/IshaanNene/AlekhinesCounter-Gambit/services/gateway/internal/auth"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -34,23 +36,99 @@ func (r *gameResolver) Clock(ctx context.Context, obj *model.Game) (*model.Clock
 	return toModelClock(snap), nil
 }
 
-// CreateGuest is the resolver for the createGuest field.
-func (r *mutationResolver) CreateGuest(ctx context.Context) (*model.Guest, error) {
-	resp, err := r.Upstream.Game.CreateGuest(ctx, &gamev1.CreateGuestRequest{})
+// LoginAsGuest is the resolver for the loginAsGuest field.
+func (r *mutationResolver) LoginAsGuest(ctx context.Context) (*model.Session, error) {
+	resp, err := r.Upstream.Auth.CreateGuest(ctx, &authv1.CreateGuestRequest{})
 	if err != nil {
 		return nil, err
 	}
-	return &model.Guest{ID: resp.GetUserId(), Username: resp.GetUsername()}, nil
+	return r.startSession(ctx, resp.GetUser())
+}
+
+// Register is the resolver for the register field.
+func (r *mutationResolver) Register(ctx context.Context, input model.RegisterInput) (*model.Session, error) {
+	req := &authv1.RegisterRequest{
+		Username: input.Username,
+		Password: input.Password,
+		Email:    deref(input.Email),
+	}
+	// Upgrading keeps the caller's existing id, so games and rating earned as a
+	// guest survive signing up. Only ever upgrade the *current* guest — taking a
+	// user id from the client would let anyone hijack another account.
+	if input.UpgradeCurrentGuest != nil && *input.UpgradeCurrentGuest {
+		if id, err := auth.FromContext(ctx); err == nil && id.IsGuest {
+			req.UpgradeUserId = id.UserID
+		}
+	}
+	resp, err := r.Upstream.Auth.Register(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return r.startSession(ctx, resp.GetUser())
+}
+
+// Login is the resolver for the login field.
+func (r *mutationResolver) Login(ctx context.Context, input model.LoginInput) (*model.Session, error) {
+	resp, err := r.Upstream.Auth.Login(ctx, &authv1.LoginRequest{
+		Identifier: input.Identifier,
+		Password:   input.Password,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return r.startSession(ctx, resp.GetUser())
+}
+
+// RequestLoginToken is the resolver for the requestLoginToken field.
+func (r *mutationResolver) RequestLoginToken(ctx context.Context, email string) (*model.LoginTokenRequest, error) {
+	resp, err := r.Upstream.Auth.RequestLoginToken(ctx, &authv1.RequestLoginTokenRequest{Email: email})
+	if err != nil {
+		return nil, err
+	}
+	out := &model.LoginTokenRequest{DeliveredInBand: resp.GetDeliveredInBand()}
+	if t := resp.GetToken(); t != "" {
+		out.Token = &t
+	}
+	if resp.GetExpiresAt() != nil {
+		at := resp.GetExpiresAt().AsTime()
+		out.ExpiresAt = &at
+	}
+	return out, nil
+}
+
+// RedeemLoginToken is the resolver for the redeemLoginToken field.
+func (r *mutationResolver) RedeemLoginToken(ctx context.Context, token string) (*model.Session, error) {
+	resp, err := r.Upstream.Auth.RedeemLoginToken(ctx, &authv1.RedeemLoginTokenRequest{Token: token})
+	if err != nil {
+		return nil, err
+	}
+	return r.startSession(ctx, resp.GetUser())
+}
+
+// Logout is the resolver for the logout field.
+func (r *mutationResolver) Logout(ctx context.Context) (bool, error) {
+	if w, ok := auth.WriterFromContext(ctx); ok {
+		r.Signer.ClearCookie(w)
+	}
+	return true, nil
 }
 
 // CreateGame is the resolver for the createGame field.
 func (r *mutationResolver) CreateGame(ctx context.Context, input model.CreateGameInput) (*model.Game, error) {
+	// The caller is always White. A client-supplied id here would let anyone
+	// start games as another user.
+	id, err := requireIdentity(ctx)
+	if err != nil {
+		return nil, err
+	}
 	resp, err := r.Upstream.Game.CreateGame(ctx, &gamev1.CreateGameRequest{
-		WhiteId:     deref(input.WhiteID),
+		WhiteId:     id.UserID,
 		BlackId:     deref(input.BlackID),
 		EngineDepth: uint32(derefInt(input.EngineDepth)),
 		InitialMs:   int64(derefInt(input.InitialMs)),
 		IncrementMs: int64(derefInt(input.IncrementMs)),
+		Rated:       input.Rated != nil && *input.Rated,
+		VsEngine:    input.VsEngine != nil && *input.VsEngine,
 	})
 	if err != nil {
 		return nil, err
@@ -60,10 +138,16 @@ func (r *mutationResolver) CreateGame(ctx context.Context, input model.CreateGam
 
 // Move is the resolver for the move field.
 func (r *mutationResolver) Move(ctx context.Context, input model.MoveInput) (*model.Game, error) {
+	// Identity comes from the session, never from the request body: otherwise a
+	// spectator could move by naming a player's id.
+	id, err := requireIdentity(ctx)
+	if err != nil {
+		return nil, err
+	}
 	resp, err := r.Upstream.Game.SubmitMove(ctx, &gamev1.SubmitMoveRequest{
 		GameId:   input.GameID,
 		Uci:      input.Uci,
-		PlayerId: deref(input.PlayerID),
+		PlayerId: id.UserID,
 	})
 	if err != nil {
 		return nil, err
@@ -75,9 +159,13 @@ func (r *mutationResolver) Move(ctx context.Context, input model.MoveInput) (*mo
 
 // Resign is the resolver for the resign field.
 func (r *mutationResolver) Resign(ctx context.Context, input model.ResignInput) (*model.Game, error) {
+	id, err := requireIdentity(ctx)
+	if err != nil {
+		return nil, err
+	}
 	resp, err := r.Upstream.Game.Resign(ctx, &gamev1.ResignRequest{
 		GameId:   input.GameID,
-		PlayerId: input.PlayerID,
+		PlayerId: id.UserID,
 	})
 	if err != nil {
 		return nil, err
@@ -85,6 +173,101 @@ func (r *mutationResolver) Resign(ctx context.Context, input model.ResignInput) 
 	g := toModelGame(resp.GetGame())
 	r.publish(ctx, g)
 	return g, nil
+}
+
+// JoinGame is the resolver for the joinGame field.
+func (r *mutationResolver) JoinGame(ctx context.Context, gameID string) (*model.Game, error) {
+	id, err := requireIdentity(ctx)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := r.Upstream.Game.JoinGame(ctx, &gamev1.JoinGameRequest{
+		GameId:   gameID,
+		PlayerId: id.UserID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	g := toModelGame(resp.GetGame())
+	// Tell anyone already watching that the seat is filled and play can start.
+	r.publish(ctx, g)
+	return g, nil
+}
+
+// Me is the resolver for the me field.
+func (r *queryResolver) Me(ctx context.Context) (*model.User, error) {
+	id, err := auth.FromContext(ctx)
+	if err != nil {
+		return nil, nil // signed out is not an error
+	}
+	// Read through to the source: the JWT carries a name and guest flag captured
+	// at sign-in, which go stale after a rename or a guest upgrade.
+	resp, err := r.Upstream.Auth.GetUser(ctx, &authv1.GetUserRequest{UserId: id.UserID})
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return toModelUser(resp.GetUser()), nil
+}
+
+// User is the resolver for the user field.
+func (r *queryResolver) User(ctx context.Context, id string) (*model.User, error) {
+	resp, err := r.Upstream.Auth.GetUser(ctx, &authv1.GetUserRequest{UserId: id})
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return toModelUser(resp.GetUser()), nil
+}
+
+// GameHistory is the resolver for the gameHistory field.
+func (r *queryResolver) GameHistory(ctx context.Context, userID *string, limit *int, offset *int) (*model.GameHistory, error) {
+	target := deref(userID)
+	if target == "" {
+		id, err := requireIdentity(ctx)
+		if err != nil {
+			return nil, err
+		}
+		target = id.UserID
+	}
+	resp, err := r.Upstream.Game.ListGames(ctx, &gamev1.ListGamesRequest{
+		UserId: target,
+		Limit:  int32(derefInt(limit)),
+		Offset: int32(derefInt(offset)),
+	})
+	if err != nil {
+		return nil, err
+	}
+	games := make([]*model.GameSummary, 0, len(resp.GetGames()))
+	for _, g := range resp.GetGames() {
+		games = append(games, toModelSummary(g))
+	}
+	return &model.GameHistory{Games: games, Total: int(resp.GetTotal())}, nil
+}
+
+// Leaderboard is the resolver for the leaderboard field.
+func (r *queryResolver) Leaderboard(ctx context.Context, limit *int) ([]*model.LeaderboardEntry, error) {
+	resp, err := r.Upstream.Game.Leaderboard(ctx, &gamev1.LeaderboardRequest{
+		Limit: int32(derefInt(limit)),
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*model.LeaderboardEntry, 0, len(resp.GetEntries()))
+	for _, e := range resp.GetEntries() {
+		out = append(out, &model.LeaderboardEntry{
+			Rank:        int(e.GetRank()),
+			UserID:      e.GetUserId(),
+			Username:    e.GetUsername(),
+			Elo:         int(e.GetElo()),
+			GamesPlayed: int(e.GetGamesPlayed()),
+		})
+	}
+	return out, nil
 }
 
 // Game is the resolver for the game field. An unknown id resolves to null
