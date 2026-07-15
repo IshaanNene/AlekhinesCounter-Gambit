@@ -2,10 +2,14 @@
 //
 // State flows one way: the server is the only source of truth. Every mutation
 // returns the new game, and the subscription pushes the same shape, so both
-// paths funnel into a single render(). The one exception is the clock, which
-// ticks locally between pushes purely for display and resyncs on every update.
+// paths funnel into a single render(). Two deliberate exceptions, both display
+// only and both resynced by the next push:
+//   * the clock ticks locally between updates;
+//   * legal moves are fetched from the server, never computed here.
 
 import { gql, GraphQLError, Subscriber } from "./graphql.js";
+import * as settings from "./settings.js";
+import { mountSettings } from "./settings-ui.js";
 import {
   parseFEN, parseUCI, squareName, glyphFor, boardOrder,
   isLightSquare, needsPromotion, formatClock, fileOf, rankOf,
@@ -24,18 +28,23 @@ const CREATE_GAME = `mutation($in: CreateGameInput!) { createGame(input: $in) { 
 const MOVE = `mutation($in: MoveInput!) { move(input: $in) { ${GAME_FIELDS} } }`;
 const RESIGN = `mutation($in: ResignInput!) { resign(input: $in) { ${GAME_FIELDS} } }`;
 const GET_GAME = `query($id: ID!) { game(id: $id) { ${GAME_FIELDS} } }`;
+const LEGAL = `query($id: ID!) { legalMoves(gameId: $id) }`;
 const ON_GAME = `subscription($id: ID!) { gameUpdated(gameId: $id) { ${GAME_FIELDS} } }`;
 
 /* ── State ──────────────────────────────────────────────────────────────── */
 
 const state = {
   game: null,
-  board: null,      // parsed FEN
-  selected: null,   // square index
-  side: "s",        // "w" | "b" | "s" (spectator)
+  board: null,       // parsed FEN
+  selected: null,    // square index
+  side: "s",         // "w" | "b" | "s" (spectator)
   flipped: false,
-  /** Clock as last reported, plus when we received it, for local ticking. */
-  clock: null,      // { whiteMs, blackMs, turn, running, at }
+  clock: null,       // { whiteMs, blackMs, turn, running, at }
+  legal: [],         // legal moves (UCI) for the current position, from the server
+  premove: null,     // { from, to } queued during the opponent's turn
+  pendingMove: null, // { from, to, promotion } awaiting confirmation
+  dragFrom: null,    // square a drag started on
+  lowTimeFired: false,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -63,6 +72,29 @@ function onConnectionState(kind, detail) {
     kind === "idle" ? "no game" : "reconnecting…";
 }
 
+/* ── Audio (low-time warning) ───────────────────────────────────────────── */
+
+// Created lazily on first interaction: browsers refuse to start an AudioContext
+// without a user gesture.
+let audioCtx = null;
+function beep() {
+  try {
+    audioCtx ??= new (window.AudioContext ?? window.webkitAudioContext)();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = "sine";
+    osc.frequency.value = 880;
+    gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.2, audioCtx.currentTime + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.35);
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.36);
+  } catch {
+    // Audio is a nicety; the visual warning still fires.
+  }
+}
+
 /* ── Identity ───────────────────────────────────────────────────────────── */
 
 // A guest id stands in for a real account until auth lands (T2.8). Persisted so
@@ -73,6 +105,22 @@ async function myGuestId() {
   const { createGuest } = await gql(CREATE_GUEST);
   localStorage.setItem("acg.guestId", createGuest.id);
   return createGuest.id;
+}
+
+/* ── Settings application ───────────────────────────────────────────────── */
+
+/** Push preference values into the DOM. Called on load and on every change. */
+function applySettings() {
+  $("board").style.setProperty("--piece-scale", settings.get("pieceSize") / 100);
+
+  const well = document.querySelector(".board-well");
+  well.classList.remove("coords-off", "coords-inside", "coords-outside");
+  well.classList.add(`coords-${settings.get("coordinates")}`);
+
+  document.querySelector(".app").classList.toggle("focus", settings.get("focusMode"));
+
+  // "White always on bottom" overrides the automatic flip for black.
+  if (settings.get("whiteOnBottom")) state.flipped = false;
 }
 
 /* ── Rendering ──────────────────────────────────────────────────────────── */
@@ -89,9 +137,14 @@ function renderBoard() {
   const boardEl = $("board");
   const squares = state.board?.squares ?? new Array(64).fill(null);
 
-  const lastMove = state.game?.moves?.length
+  const lastMove = settings.get("highlightLastMove") && state.game?.moves?.length
     ? parseUCI(state.game.moves[state.game.moves.length - 1].uci)
     : null;
+
+  // Destinations for the selected piece, straight from the server's move list.
+  const targets = settings.get("showLegalMoves") && state.selected !== null
+    ? legalTargetsFrom(state.selected)
+    : new Set();
 
   boardEl.replaceChildren();
   for (const sq of boardOrder(state.flipped)) {
@@ -107,6 +160,14 @@ function renderBoard() {
 
     if (sq === state.selected) cell.classList.add("sq--selected");
     if (lastMove && (sq === lastMove.from || sq === lastMove.to)) cell.classList.add("sq--last");
+    if (targets.has(sq)) {
+      cell.classList.add("sq--legal");
+      if (piece) cell.classList.add("sq--capture");
+    }
+    if (state.premove && (sq === state.premove.from || sq === state.premove.to)) {
+      cell.classList.add("sq--premove");
+    }
+    if (state.dragFrom === sq) cell.classList.add("sq--dragging");
 
     if (piece) {
       const span = document.createElement("span");
@@ -121,7 +182,8 @@ function renderBoard() {
     if (onBottomEdge) cell.append(coord("file", "abcdefgh"[fileOf(sq)]));
     if (onLeftEdge) cell.append(coord("rank", String(rankOf(sq) + 1)));
 
-    cell.addEventListener("click", () => onSquareClick(sq));
+    cell.addEventListener("click", (e) => onSquareClick(sq, e));
+    cell.addEventListener("pointerdown", (e) => onPointerDown(e, sq));
     boardEl.append(cell);
   }
 
@@ -140,6 +202,8 @@ function coord(kind, text) {
 
 function renderClocks() {
   const c = state.clock;
+  const lowMs = settings.get("lowTimeSeconds") * 1000;
+
   for (const side of ["w", "b"]) {
     const box = $(`clock-${side}`);
     const timeEl = $(`time-${side}`);
@@ -151,7 +215,18 @@ function renderClocks() {
     const ms = liveMs(side);
     timeEl.textContent = formatClock(ms);
     box.classList.toggle("is-active", c.running && c.turn.toLowerCase()[0] === side);
-    box.classList.toggle("is-low", ms < 30000);
+    box.classList.toggle("is-low", settings.get("lowTimeWarning") && ms < lowMs);
+  }
+
+  // Audible warning: once per game, and only for the side you are playing.
+  if (c?.running && settings.get("lowTimeWarning") && state.side !== "s") {
+    const mine = liveMs(state.side);
+    if (mine < lowMs && !state.lowTimeFired) {
+      state.lowTimeFired = true;
+      beep();
+    } else if (mine >= lowMs) {
+      state.lowTimeFired = false; // re-arm once the increment lifts you clear
+    }
   }
 }
 
@@ -201,15 +276,12 @@ function renderMoves() {
     list.append(empty);
     return;
   }
-  // Group half-moves into numbered pairs: "1. e2e4 e7e5".
   for (let i = 0; i < moves.length; i += 2) {
     list.append(cell("moves__no", `${i / 2 + 1}.`));
     list.append(cell("moves__ply", moves[i].uci, i === moves.length - 1));
-    if (moves[i + 1]) {
-      list.append(cell("moves__ply", moves[i + 1].uci, i + 1 === moves.length - 1));
-    } else {
-      list.append(cell("moves__ply", ""));
-    }
+    list.append(moves[i + 1]
+      ? cell("moves__ply", moves[i + 1].uci, i + 1 === moves.length - 1)
+      : cell("moves__ply", ""));
   }
   list.scrollTop = list.scrollHeight;
 }
@@ -227,7 +299,6 @@ function renderControls() {
   $("side-block").hidden = !g;
   if (g) {
     $("share-link").value = `${location.origin}${location.pathname}#${g.id}`;
-    // Only a participant in a live game can resign.
     $("resign").disabled = g.status !== "IN_PROGRESS" || state.side === "s";
   }
   for (const btn of document.querySelectorAll(".segmented__btn")) {
@@ -235,14 +306,57 @@ function renderControls() {
   }
 }
 
+/* ── Legal moves ────────────────────────────────────────────────────────── */
+
+/** Squares the selected piece may move to, per the server's move list. */
+function legalTargetsFrom(from) {
+  const out = new Set();
+  for (const uci of state.legal) {
+    const m = parseUCI(uci);
+    if (m.from === from) out.add(m.to);
+  }
+  return out;
+}
+
+const isLegal = (from, to) =>
+  state.legal.some((uci) => {
+    const m = parseUCI(uci);
+    return m.from === from && m.to === to;
+  });
+
+/**
+ * Refresh the legal-move list for the current position. Only fetched when a
+ * feature needs it, so a plain spectator costs no extra round trip.
+ */
+async function refreshLegal() {
+  const needed = settings.get("showLegalMoves") || settings.get("premoves");
+  if (!needed || !state.game || state.game.status !== "IN_PROGRESS") {
+    state.legal = [];
+    return;
+  }
+  try {
+    const data = await gql(LEGAL, { id: state.game.id });
+    state.legal = data.legalMoves ?? [];
+  } catch {
+    state.legal = []; // hints are optional; the server still referees
+  }
+}
+
 /* ── Game updates ───────────────────────────────────────────────────────── */
 
 function applyGame(game) {
   if (!game) return;
+  const prevTurn = state.board?.turn;
   state.game = game;
   state.board = parseFEN(game.fen);
   state.clock = game.clock ? { ...game.clock, at: Date.now() } : null;
+  if (prevTurn !== state.board.turn) state.selected = null;
   render();
+
+  refreshLegal().then(() => {
+    renderBoard();
+    playPremoveIfReady();
+  });
 }
 
 async function openGame(id, { subscribe = true } = {}) {
@@ -258,12 +372,27 @@ async function openGame(id, { subscribe = true } = {}) {
   }
 }
 
-/* ── Interaction ────────────────────────────────────────────────────────── */
+/* ── Turn helpers ───────────────────────────────────────────────────────── */
 
-function onSquareClick(sq) {
+const myTurn = () =>
+  Boolean(state.game) &&
+  state.game.status === "IN_PROGRESS" &&
+  state.side !== "s" &&
+  state.board?.turn === state.side;
+
+const playerIdForSide = (side) =>
+  !state.game ? null : side === "w" ? state.game.whiteId : state.game.blackId;
+
+/* ── Interaction: click ─────────────────────────────────────────────────── */
+
+function onSquareClick(sq, event) {
+  if (settings.get("moveMethod") === "drag") return; // drag-only: ignore clicks
+  handleSelect(sq, event?.altKey ?? false);
+}
+
+function handleSelect(sq, altKey = false) {
   const g = state.game;
   if (!g || g.status !== "IN_PROGRESS" || !state.board) return;
-
   if (state.side === "s") {
     toast("You are spectating — pick a side to play.");
     return;
@@ -271,7 +400,6 @@ function onSquareClick(sq) {
 
   const piece = state.board.squares[sq];
 
-  // First click: select one of your own pieces.
   if (state.selected === null) {
     if (!piece) return;
     if (piece.color !== state.side) {
@@ -283,7 +411,6 @@ function onSquareClick(sq) {
     return;
   }
 
-  // Clicking the same square clears; clicking another of your pieces reselects.
   if (sq === state.selected) {
     state.selected = null;
     renderBoard();
@@ -295,13 +422,165 @@ function onSquareClick(sq) {
     return;
   }
 
-  submitMove(state.selected, sq);
+  const from = state.selected;
+  state.selected = null;
+  attemptMove(from, sq, altKey);
 }
 
-async function submitMove(from, to) {
-  let uci = squareName(from) + squareName(to);
-  if (needsPromotion(state.board.squares, from, to)) uci += "q"; // auto-queen
+/* ── Interaction: drag ──────────────────────────────────────────────────── */
+
+let ghost = null;
+
+function onPointerDown(e, sq) {
+  const method = settings.get("moveMethod");
+  if (method === "click") return;
+  if (e.button !== 0) return;
+
+  const g = state.game;
+  if (!g || g.status !== "IN_PROGRESS" || state.side === "s") return;
+  const piece = state.board?.squares[sq];
+  if (!piece || piece.color !== state.side) return;
+
+  state.dragFrom = sq;
+  state.selected = sq; // so legal-move dots show while dragging
+  renderBoard();
+
+  ghost = document.createElement("div");
+  ghost.className = `drag-ghost piece piece--${piece.color}`;
+  ghost.style.fontSize = getComputedStyle(document.querySelector(".sq")).fontSize;
+  ghost.textContent = glyphFor(piece);
+  moveGhost(ghost, e.clientX, e.clientY);
+  document.body.append(ghost);
+  $("board").classList.add("is-dragging");
+
+  // Pointer capture would pin events to the origin square, but we need to know
+  // which square is under the cursor on release, so track on document instead.
+  document.addEventListener("pointermove", onPointerMove);
+  document.addEventListener("pointerup", onPointerUp, { once: true });
+  e.preventDefault();
+}
+
+const moveGhost = (el, x, y) => {
+  el.style.left = `${x}px`;
+  el.style.top = `${y}px`;
+};
+
+function onPointerMove(e) {
+  if (ghost) moveGhost(ghost, e.clientX, e.clientY);
+}
+
+function onPointerUp(e) {
+  document.removeEventListener("pointermove", onPointerMove);
+  ghost?.remove();
+  ghost = null;
+  $("board").classList.remove("is-dragging");
+
+  const from = state.dragFrom;
+  state.dragFrom = null;
+  if (from === null) return;
+
+  const target = document.elementFromPoint(e.clientX, e.clientY)?.closest(".sq");
+  const to = target ? Number(target.dataset.sq) : null;
+
+  // Released on the origin (or off-board): fall back to click-to-select so a
+  // drag that never moved behaves like a plain click.
+  if (to === null || to === from) {
+    renderBoard();
+    return;
+  }
   state.selected = null;
+  attemptMove(from, to, e.altKey);
+}
+
+/* ── Move pipeline ──────────────────────────────────────────────────────── */
+
+/**
+ * The single funnel for an attempted move: premove queueing, promotion choice,
+ * and confirmation all happen here so click and drag behave identically.
+ */
+async function attemptMove(from, to, altKey = false) {
+  // Not your turn: queue as a premove if enabled, otherwise reject early.
+  if (!myTurn()) {
+    if (!settings.get("premoves")) {
+      toast("Not your turn.");
+      renderBoard();
+      return;
+    }
+    state.premove = { from, to };
+    renderBoard();
+    toast(`Premove ${squareName(from)}${squareName(to)} queued.`);
+    return;
+  }
+
+  const promotion = await resolvePromotion(from, to, altKey);
+  if (promotion === false) { renderBoard(); return; } // picker dismissed
+
+  if (settings.get("confirmMove")) {
+    state.pendingMove = { from, to, promotion };
+    showConfirmBar(from, to, promotion);
+    renderBoard();
+    return;
+  }
+  await submitMove(from, to, promotion);
+}
+
+/**
+ * Decide the promotion piece. Returns a letter, null when not a promotion, or
+ * false if the user dismissed the picker.
+ *
+ * Auto-queen is the default; holding ALT opens the picker instead. With
+ * auto-queen off, the picker always opens.
+ */
+async function resolvePromotion(from, to, altKey) {
+  if (!state.board || !needsPromotion(state.board.squares, from, to)) return null;
+  const auto = settings.get("autoQueen") && !altKey;
+  return auto ? "q" : askPromotion();
+}
+
+function askPromotion() {
+  const scrim = $("promo-scrim");
+  const box = $("promo-choices");
+  box.replaceChildren();
+
+  return new Promise((resolve) => {
+    const finish = (value) => {
+      scrim.hidden = true;
+      document.removeEventListener("keydown", onKey);
+      resolve(value);
+    };
+    const onKey = (e) => { if (e.key === "Escape") finish(false); };
+
+    for (const [type, label] of [["q", "Queen"], ["r", "Rook"], ["b", "Bishop"], ["n", "Knight"]]) {
+      const btn = document.createElement("button");
+      btn.className = `promo__btn piece--${state.side}`;
+      btn.textContent = glyphFor({ type });
+      btn.title = label;
+      btn.setAttribute("aria-label", label);
+      btn.addEventListener("click", () => finish(type));
+      box.append(btn);
+    }
+    scrim.hidden = false;
+    document.addEventListener("keydown", onKey);
+    box.firstChild?.focus();
+    // Clicking the backdrop cancels.
+    scrim.onclick = (e) => { if (e.target === scrim) finish(false); };
+  });
+}
+
+function showConfirmBar(from, to, promotion) {
+  $("confirm-move-text").textContent = squareName(from) + squareName(to) + (promotion ?? "");
+  $("confirm-bar").hidden = false;
+}
+
+function hideConfirmBar() {
+  $("confirm-bar").hidden = true;
+  state.pendingMove = null;
+}
+
+async function submitMove(from, to, promotion) {
+  const uci = squareName(from) + squareName(to) + (promotion ?? "");
+  state.selected = null;
+  hideConfirmBar();
   renderBoard();
 
   try {
@@ -309,7 +588,6 @@ async function submitMove(from, to) {
       in: {
         gameId: state.game.id,
         uci,
-        // Engine games take no player id; human games are authorised by it.
         playerId: state.game.vsEngine ? null : playerIdForSide(state.side),
       },
     });
@@ -317,16 +595,57 @@ async function submitMove(from, to) {
   } catch (err) {
     // The server is the referee: surface its verdict rather than guessing.
     toast(friendlyError(err), true);
+    renderBoard();
   }
 }
 
-/** Map the chosen side to the game's stored player id. */
-function playerIdForSide(side) {
-  if (!state.game) return null;
-  return side === "w" ? state.game.whiteId : state.game.blackId;
+/**
+ * Play a queued premove once it becomes our turn. Screened against the server's
+ * legal-move list first, so an premove invalidated by the opponent's reply is
+ * discarded quietly instead of bouncing off the API.
+ */
+function playPremoveIfReady() {
+  const pm = state.premove;
+  if (!pm || !myTurn()) return;
+  state.premove = null;
+
+  if (state.legal.length && !isLegal(pm.from, pm.to)) {
+    renderBoard();
+    toast("Premove is no longer legal — discarded.");
+    return;
+  }
+  const promotion = needsPromotion(state.board.squares, pm.from, pm.to) ? "q" : null;
+  submitMove(pm.from, pm.to, promotion);
 }
 
-/** Strip gRPC framing so users see "illegal move: e2e5", not a stack of codes. */
+/* ── Confirmation dialog ────────────────────────────────────────────────── */
+
+/** Promise-based confirm. Used for resign, and for draw offers once they exist. */
+function confirmDialog(title, body, confirmLabel = "Confirm") {
+  const scrim = $("confirm-scrim");
+  $("confirm-title").textContent = title;
+  $("confirm-body").textContent = body;
+  $("confirm-yes").textContent = confirmLabel;
+
+  return new Promise((resolve) => {
+    const finish = (value) => {
+      scrim.hidden = true;
+      $("confirm-yes").onclick = null;
+      $("confirm-no").onclick = null;
+      document.removeEventListener("keydown", onKey);
+      resolve(value);
+    };
+    const onKey = (e) => { if (e.key === "Escape") finish(false); };
+
+    $("confirm-yes").onclick = () => finish(true);
+    $("confirm-no").onclick = () => finish(false);
+    scrim.onclick = (e) => { if (e.target === scrim) finish(false); };
+    document.addEventListener("keydown", onKey);
+    scrim.hidden = false;
+    $("confirm-no").focus();
+  });
+}
+
 function friendlyError(err) {
   if (!(err instanceof GraphQLError)) return err.message ?? "Something went wrong.";
   const m = err.message.match(/desc = (.*)$/);
@@ -348,14 +667,32 @@ function press(btn, fn) {
   });
 }
 
-function timeControl() {
-  return {
-    initialMs: Math.max(1, Number($("minutes").value || 5)) * 60_000,
-    incrementMs: Math.max(0, Number($("increment").value || 0)) * 1000,
-  };
+const timeControl = () => ({
+  initialMs: Math.max(1, Number($("minutes").value || 5)) * 60_000,
+  incrementMs: Math.max(0, Number($("increment").value || 0)) * 1000,
+});
+
+function startGame(game, side) {
+  setSide(side);
+  state.premove = null;
+  state.lowTimeFired = false;
+  state.flipped = !settings.get("whiteOnBottom") && side === "b";
+  applyGame(game);
+  location.hash = game.id;
+  subscriber.subscribe(ON_GAME, { id: game.id }, (p) => applyGame(p?.gameUpdated));
 }
 
 function init() {
+  mountSettings({ openButton: $("open-settings"), drawer: $("settings-drawer") });
+  applySettings();
+
+  // Re-apply and re-render on any preference change, so toggles take effect
+  // immediately rather than on the next move.
+  settings.onChange(() => {
+    applySettings();
+    refreshLegal().then(render);
+  });
+
   $("depth").addEventListener("input", (e) => { $("depth-out").value = e.target.value; });
 
   press($("new-engine"), async () => {
@@ -363,30 +700,20 @@ function init() {
     const data = await gql(CREATE_GAME, {
       in: { whiteId: me, engineDepth: Number($("depth").value) },
     });
-    setSide("w");
-    state.flipped = false;
-    applyGame(data.createGame);
-    location.hash = data.createGame.id;
-    subscriber.subscribe(ON_GAME, { id: data.createGame.id },
-      (p) => applyGame(p?.gameUpdated));
+    startGame(data.createGame, "w");
     toast("New game against Stockfish.");
   });
 
   press($("new-human"), async () => {
     // Two identities so both seats exist; without auth either tab may claim
-    // either side, which is exactly what makes the share link demo work.
+    // either side, which is what makes the share link demo work.
     const white = await myGuestId();
     const { createGuest: black } = await gql(CREATE_GUEST);
     const { initialMs, incrementMs } = timeControl();
     const data = await gql(CREATE_GAME, {
       in: { whiteId: white, blackId: black.id, initialMs, incrementMs },
     });
-    setSide("w");
-    state.flipped = false;
-    applyGame(data.createGame);
-    location.hash = data.createGame.id;
-    subscriber.subscribe(ON_GAME, { id: data.createGame.id },
-      (p) => applyGame(p?.gameUpdated));
+    startGame(data.createGame, "w");
     toast("Game created — share the link to play.");
   });
 
@@ -396,10 +723,24 @@ function init() {
   });
 
   press($("resign"), async () => {
+    if (settings.get("confirmResign")) {
+      const ok = await confirmDialog(
+        "Resign this game?",
+        "Your opponent will be awarded the win. This cannot be undone.",
+        "Resign",
+      );
+      if (!ok) return;
+    }
     const data = await gql(RESIGN, {
       in: { gameId: state.game.id, playerId: playerIdForSide(state.side) },
     });
     applyGame(data.resign);
+  });
+
+  $("confirm-cancel").addEventListener("click", () => { hideConfirmBar(); renderBoard(); });
+  $("confirm-play").addEventListener("click", () => {
+    const pm = state.pendingMove;
+    if (pm) submitMove(pm.from, pm.to, pm.promotion);
   });
 
   $("flip").addEventListener("click", () => {
@@ -409,8 +750,9 @@ function init() {
 
   for (const btn of document.querySelectorAll(".segmented__btn")) {
     btn.addEventListener("click", () => {
-      setSide(btn.dataset.side);
-      if (btn.dataset.side !== "s") state.flipped = btn.dataset.side === "b";
+      const side = btn.dataset.side;
+      setSide(side);
+      if (side !== "s") state.flipped = !settings.get("whiteOnBottom") && side === "b";
       render();
     });
   }
@@ -418,7 +760,6 @@ function init() {
   // Tick the clock display ~4x/second; authoritative values arrive on push.
   setInterval(() => { if (state.clock?.running) renderClocks(); }, 250);
 
-  // Deep link: /#<gameId> opens straight into a live board.
   window.addEventListener("hashchange", () => {
     const id = location.hash.slice(1);
     if (id && id !== state.game?.id) openGame(id).catch(() => {});
@@ -436,6 +777,7 @@ function init() {
 function setSide(side) {
   state.side = side;
   state.selected = null;
+  state.premove = null;
 }
 
 init();

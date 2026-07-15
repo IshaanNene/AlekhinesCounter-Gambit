@@ -19,9 +19,13 @@
           <p>distributed chess engine</p>
         </div>
       </div>
-      <div class="status-pill" id="conn" data-state="offline">
-        <span class="status-pill__dot" aria-hidden="true"></span>
-        <span id="conn-text">connecting…</span>
+      <div class="topbar__right">
+        <div class="status-pill" id="conn" data-state="offline">
+          <span class="status-pill__dot" aria-hidden="true"></span>
+          <span id="conn-text">connecting…</span>
+        </div>
+        <button class="btn btn--icon" id="open-settings" aria-expanded="false"
+                aria-controls="settings-drawer" aria-label="Settings" title="Settings">⚙</button>
       </div>
     </header>
 
@@ -84,6 +88,11 @@
         <div class="board-well">
           <div class="board" id="board" role="grid" aria-label="Chess board"></div>
         </div>
+        <div class="confirm" id="confirm-bar" hidden>
+          <span class="confirm__text">Play <strong id="confirm-move-text"></strong>?</span>
+          <button class="btn btn--ghost" id="confirm-cancel">Cancel</button>
+          <button class="btn btn--primary btn--ghost" id="confirm-play">Play</button>
+        </div>
         <div class="board-actions">
           <button class="btn btn--ghost" id="flip">⇅ Flip board</button>
           <p class="turn-note" id="turn-note">—</p>
@@ -115,6 +124,29 @@
       </aside>
 
     </main>
+  </div>
+
+  <!-- Settings drawer, rendered from SETTINGS_SCHEMA -->
+  <aside class="drawer" id="settings-drawer" aria-label="Settings"></aside>
+
+  <!-- Promotion picker (shown when auto-queen is off, or ALT is held) -->
+  <div class="scrim" id="promo-scrim" hidden>
+    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="promo-title">
+      <h2 class="dialog__title" id="promo-title">Promote to</h2>
+      <div class="promo" id="promo-choices"></div>
+    </div>
+  </div>
+
+  <!-- Generic confirmation (resign, and draw offers once they exist) -->
+  <div class="scrim" id="confirm-scrim" hidden>
+    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
+      <h2 class="dialog__title" id="confirm-title">Are you sure?</h2>
+      <p class="dialog__body" id="confirm-body"></p>
+      <div class="dialog__actions">
+        <button class="btn btn--ghost" id="confirm-no">Cancel</button>
+        <button class="btn btn--danger" id="confirm-yes">Confirm</button>
+      </div>
+    </div>
   </div>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
