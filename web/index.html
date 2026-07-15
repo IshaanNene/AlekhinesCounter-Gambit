@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Alekhine's Counter-Gambit</title>
+  <meta name="description" content="A distributed chess engine — play Stockfish or a friend, live." />
+  <link rel="stylesheet" href="./styles.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>♞</text></svg>" />
+</head>
+<body>
+  <div class="app">
+
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand__mark" aria-hidden="true">♞</div>
+        <div class="brand__text">
+          <h1>Alekhine's Counter-Gambit</h1>
+          <p>distributed chess engine</p>
+        </div>
+      </div>
+      <div class="status-pill" id="conn" data-state="offline">
+        <span class="status-pill__dot" aria-hidden="true"></span>
+        <span id="conn-text">connecting…</span>
+      </div>
+    </header>
+
+    <main class="layout">
+
+      <!-- ── Left: controls ─────────────────────────────── -->
+      <aside class="panel panel--controls">
+        <section class="block">
+          <h2 class="block__title">New game</h2>
+
+          <button class="btn btn--primary" id="new-engine">
+            <span class="btn__icon" aria-hidden="true">⚙</span> Play the engine
+          </button>
+
+          <label class="field" for="depth">
+            <span class="field__label">
+              Engine strength <output class="field__value" id="depth-out">10</output>
+            </span>
+            <input class="slider" type="range" id="depth" min="1" max="20" value="10" />
+          </label>
+
+          <button class="btn" id="new-human">
+            <span class="btn__icon" aria-hidden="true">⚔</span> Two players
+          </button>
+
+          <div class="field-row">
+            <label class="field" for="minutes">
+              <span class="field__label">Minutes</span>
+              <input class="input" type="number" id="minutes" value="5" min="1" max="180" />
+            </label>
+            <label class="field" for="increment">
+              <span class="field__label">Increment (s)</span>
+              <input class="input" type="number" id="increment" value="2" min="0" max="60" />
+            </label>
+          </div>
+        </section>
+
+        <section class="block" id="share-block" hidden>
+          <h2 class="block__title">Share</h2>
+          <p class="hint">Open this link in another tab to watch or play the other side.</p>
+          <div class="share">
+            <input class="input input--mono" id="share-link" readonly />
+            <button class="btn btn--icon" id="copy-link" title="Copy link" aria-label="Copy link">⧉</button>
+          </div>
+        </section>
+
+        <section class="block" id="side-block" hidden>
+          <h2 class="block__title">You are</h2>
+          <div class="segmented" role="group" aria-label="Choose your side">
+            <button class="segmented__btn" data-side="w">White</button>
+            <button class="segmented__btn" data-side="b">Black</button>
+            <button class="segmented__btn is-active" data-side="s">Spectator</button>
+          </div>
+          <button class="btn btn--danger" id="resign" disabled>Resign</button>
+        </section>
+      </aside>
+
+      <!-- ── Center: board ──────────────────────────────── -->
+      <section class="board-area">
+        <div class="board-well">
+          <div class="board" id="board" role="grid" aria-label="Chess board"></div>
+        </div>
+        <div class="board-actions">
+          <button class="btn btn--ghost" id="flip">⇅ Flip board</button>
+          <p class="turn-note" id="turn-note">—</p>
+        </div>
+      </section>
+
+      <!-- ── Right: clocks, status, moves ───────────────── -->
+      <aside class="panel panel--info">
+        <section class="block">
+          <div class="clock" id="clock-b" data-side="b">
+            <span class="clock__who">Black</span>
+            <span class="clock__time" id="time-b">—</span>
+          </div>
+          <div class="clock" id="clock-w" data-side="w">
+            <span class="clock__who">White</span>
+            <span class="clock__time" id="time-w">—</span>
+          </div>
+        </section>
+
+        <section class="block">
+          <h2 class="block__title">Status</h2>
+          <div class="status" id="status">No game yet — start one on the left.</div>
+        </section>
+
+        <section class="block block--grow">
+          <h2 class="block__title">Moves</h2>
+          <ol class="moves" id="moves"></ol>
+        </section>
+      </aside>
+
+    </main>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

@@ -1,0 +1,488 @@
+/* ============================================================================
+   Alekhine's Counter-Gambit — neumorphic ("soft UI") design system.
+
+   The whole look derives from one rule: a single light source at the top-left.
+   Every raised element casts a dark shadow down-right and a light shadow
+   up-left, both in tones of the *same* surface colour — nothing sits "on" the
+   page, everything is extruded from it.
+
+       surface #e0e0e0  →  light #ffffff (up-left)  ·  dark #bebebe (down-right)
+
+   This is the neumorphism.io formula (neumorphism.io/#e0e0e0) expressed as
+   tokens: --nm-raised / --nm-inset / concave + convex gradients.
+
+   Accessibility note: neumorphism is inherently low-contrast — that is the
+   aesthetic. We keep the *decoration* soft but never let it carry meaning
+   alone: text, pieces, and focus rings all use high-contrast colours, controls
+   keep visible focus, and board squares stay clearly distinguishable.
+   ========================================================================= */
+
+/* ── Tokens ─────────────────────────────────────────────────────────────── */
+:root {
+  /* Neumorphic surface triad */
+  --surface: #e0e0e0;
+  --light: #ffffff;
+  --dark: #bebebe;
+
+  /* Extrusion presets (light source: top-left) */
+  --nm-raised: 6px 6px 12px var(--dark), -6px -6px 12px var(--light);
+  --nm-raised-lg: 14px 14px 28px var(--dark), -14px -14px 28px var(--light);
+  --nm-raised-sm: 3px 3px 7px var(--dark), -3px -3px 7px var(--light);
+  --nm-inset: inset 6px 6px 12px var(--dark), inset -6px -6px 12px var(--light);
+  --nm-inset-sm: inset 3px 3px 6px var(--dark), inset -3px -3px 6px var(--light);
+
+  /* Concave dips inward, convex bulges outward */
+  --nm-concave: linear-gradient(145deg, #cacaca, #f0f0f0);
+  --nm-convex: linear-gradient(145deg, #f0f0f0, #cacaca);
+
+  /* Ink — carries the actual information, so it stays high contrast */
+  --ink: #31343a;
+  --ink-soft: #6a6f78;
+  --ink-faint: #9aa0aa;
+
+  /* Accent: desaturated indigo reads as "soft UI" rather than a neon sticker */
+  --accent: #5c6bc0;
+  --accent-soft: rgba(92, 107, 192, 0.26);
+  --danger: #c0605c;
+  --good: #5c9c72;
+
+  /* Board */
+  --sq-light: #e8e8e8;
+  --sq-dark: #c6c6c6;
+  --piece-white: #fbfbfb;
+  --piece-black: #33373d;
+
+  --radius: 16px;
+  --radius-lg: 26px;
+  --radius-pill: 999px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --surface: #2e3238;
+    --light: #383d45;
+    --dark: #24272b;
+
+    --nm-concave: linear-gradient(145deg, #292d32, #33383f);
+    --nm-convex: linear-gradient(145deg, #33383f, #292d32);
+
+    --ink: #e6e8ec;
+    --ink-soft: #a4abb6;
+    --ink-faint: #767d88;
+
+    --accent: #8b98e8;
+    --accent-soft: rgba(139, 152, 232, 0.24);
+    --danger: #e08b87;
+    --good: #7dc79a;
+
+    --sq-light: #3a3f47;
+    --sq-dark: #262a2f;
+    --piece-white: #f2f4f7;
+    --piece-black: #14161a;
+  }
+}
+
+/* ── Base ───────────────────────────────────────────────────────────────── */
+* { box-sizing: border-box; }
+
+/* Our layout classes set display, which would otherwise beat the [hidden]
+   attribute's UA `display: none`. */
+[hidden] { display: none !important; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--surface);
+  color: var(--ink);
+  font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
+
+.app {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: clamp(16px, 3vw, 32px);
+}
+
+/* ── Top bar ────────────────────────────────────────────────────────────── */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: clamp(18px, 3vw, 30px);
+  flex-wrap: wrap;
+}
+
+.brand { display: flex; align-items: center; gap: 16px; }
+
+/* The logo is a convex disc: it bulges out of the page. */
+.brand__mark {
+  width: 54px; height: 54px;
+  display: grid; place-items: center;
+  font-size: 28px;
+  color: var(--accent);
+  border-radius: var(--radius-pill);
+  background: var(--nm-convex);
+  box-shadow: var(--nm-raised);
+}
+
+.brand__text h1 { font-size: clamp(17px, 2.4vw, 21px); }
+.brand__text p {
+  margin: 2px 0 0;
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.status-pill {
+  display: inline-flex; align-items: center; gap: 9px;
+  padding: 9px 16px;
+  font-size: 12.5px; font-weight: 500;
+  color: var(--ink-soft);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--nm-inset-sm);
+}
+.status-pill__dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--ink-faint);
+  box-shadow: 0 0 0 0 var(--accent-soft);
+}
+.status-pill[data-state="live"] .status-pill__dot {
+  background: var(--good);
+  animation: pulse 2s ease-out infinite;
+}
+.status-pill[data-state="error"] .status-pill__dot { background: var(--danger); }
+
+@keyframes pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(92, 156, 114, 0.5); }
+  70%  { box-shadow: 0 0 0 7px rgba(92, 156, 114, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(92, 156, 114, 0); }
+}
+
+/* ── Layout ─────────────────────────────────────────────────────────────── */
+.layout {
+  display: grid;
+  grid-template-columns: 250px minmax(0, 1fr) 250px;
+  gap: clamp(16px, 2.4vw, 28px);
+  align-items: start;
+}
+
+@media (max-width: 1080px) {
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  .board-area { order: -1; }
+}
+
+/* Panels are raised slabs. */
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 20px;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--nm-raised);
+}
+
+.block { display: flex; flex-direction: column; gap: 12px; }
+.block--grow { flex: 1; min-height: 0; }
+
+.block__title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.hint { margin: 0; font-size: 12px; line-height: 1.5; color: var(--ink-soft); }
+
+/* ── Buttons ────────────────────────────────────────────────────────────── */
+/* Raised at rest; on press the shadow inverts to inset, so the button
+   physically sinks into the surface. That press state is the whole trick. */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 9px;
+  padding: 13px 16px;
+  font: inherit; font-size: 13.5px; font-weight: 600;
+  color: var(--ink);
+  background: var(--surface);
+  border: 0;
+  border-radius: var(--radius);
+  box-shadow: var(--nm-raised);
+  cursor: pointer;
+  transition: box-shadow 160ms ease, color 160ms ease, transform 160ms ease;
+}
+.btn:hover { color: var(--accent); }
+.btn:active,
+.btn.is-pressed { box-shadow: var(--nm-inset-sm); transform: translateY(1px); }
+.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.btn:disabled { color: var(--ink-faint); cursor: not-allowed; box-shadow: var(--nm-raised-sm); opacity: 0.65; }
+
+.btn--primary { color: var(--accent); background: var(--nm-convex); }
+.btn--danger { color: var(--danger); }
+.btn--ghost { box-shadow: var(--nm-raised-sm); padding: 10px 14px; font-size: 12.5px; }
+.btn--icon { padding: 12px 14px; flex: 0 0 auto; }
+.btn__icon { font-size: 15px; }
+
+/* ── Fields ─────────────────────────────────────────────────────────────── */
+.field { display: flex; flex-direction: column; gap: 8px; }
+.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+.field__label {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 12px; font-weight: 500; color: var(--ink-soft);
+}
+.field__value {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+/* Inputs are wells — carved into the surface, the inverse of a button. */
+.input {
+  width: 100%;
+  padding: 11px 13px;
+  font: inherit; font-size: 13px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 0;
+  border-radius: 12px;
+  box-shadow: var(--nm-inset-sm);
+}
+.input:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
+.input--mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11px; }
+
+.share { display: flex; gap: 10px; }
+.share .input { min-width: 0; }
+
+/* Slider: an inset track with a convex thumb resting in it. */
+.slider {
+  -webkit-appearance: none; appearance: none;
+  width: 100%; height: 12px;
+  background: var(--surface);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--nm-inset-sm);
+  cursor: pointer;
+}
+.slider:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  background: var(--nm-convex);
+  box-shadow: var(--nm-raised-sm);
+  cursor: grab;
+}
+.slider::-moz-range-thumb {
+  width: 22px; height: 22px; border: 0;
+  border-radius: 50%;
+  background: var(--nm-convex);
+  box-shadow: var(--nm-raised-sm);
+  cursor: grab;
+}
+
+/* ── Segmented control ──────────────────────────────────────────────────── */
+/* The group is a well; the active option rises out of it. */
+.segmented {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  padding: 6px;
+  border-radius: 14px;
+  box-shadow: var(--nm-inset-sm);
+}
+.segmented__btn {
+  padding: 9px 4px;
+  font: inherit; font-size: 12px; font-weight: 600;
+  color: var(--ink-soft);
+  background: transparent;
+  border: 0; border-radius: 10px;
+  cursor: pointer;
+  transition: box-shadow 160ms ease, color 160ms ease;
+}
+.segmented__btn:hover { color: var(--ink); }
+.segmented__btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.segmented__btn.is-active {
+  color: var(--accent);
+  background: var(--surface);
+  box-shadow: var(--nm-raised-sm);
+}
+
+/* ── Board ──────────────────────────────────────────────────────────────── */
+.board-area { display: flex; flex-direction: column; gap: 14px; }
+
+/* The board is pressed *into* the page — the deepest element in the UI. */
+.board-well {
+  padding: 16px;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--nm-inset);
+}
+
+.board {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  /* Explicit rows are required: aspect-ratio sizes the grid, but auto rows are
+     sized by content, so squares holding no piece would collapse to zero. */
+  grid-template-rows: repeat(8, 1fr);
+  aspect-ratio: 1;
+  width: 100%;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: var(--nm-raised-sm);
+}
+
+.sq {
+  position: relative;
+  display: grid; place-items: center;
+  border: 0; padding: 0; margin: 0;
+  font-size: clamp(22px, 5.2vw, 42px);
+  line-height: 1;
+  cursor: pointer;
+  background: var(--sq-light);
+  transition: background-color 140ms ease;
+}
+.sq--dark { background: var(--sq-dark); }
+.sq:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; z-index: 2; }
+
+/* Coordinate ticks, shown only on the board edges. */
+.sq__coord {
+  position: absolute;
+  font-size: 8.5px;
+  font-weight: 700;
+  color: var(--ink-faint);
+  opacity: 0.75;
+  pointer-events: none;
+}
+.sq__coord--file { bottom: 2px; right: 4px; }
+.sq__coord--rank { top: 2px; left: 4px; }
+
+/* Pieces: one filled glyph set for both colours, separated by fill + shadow.
+   The shadow follows the same top-left light source as the rest of the UI. */
+.piece {
+  pointer-events: none;
+  user-select: none;
+  transition: transform 120ms ease;
+}
+.piece--w {
+  color: var(--piece-white);
+  text-shadow: 1.5px 1.5px 2px rgba(0, 0, 0, 0.42), -1px -1px 1px rgba(255, 255, 255, 0.85);
+}
+.piece--b {
+  color: var(--piece-black);
+  text-shadow: 1.5px 1.5px 2px rgba(0, 0, 0, 0.3), -1px -1px 1px rgba(255, 255, 255, 0.25);
+}
+
+.sq--selected { background: var(--accent-soft); }
+.sq--selected .piece { transform: scale(1.08); }
+/* Last move: a soft ring rather than a hard fill, to stay in the soft-UI idiom. */
+.sq--last::after {
+  content: "";
+  position: absolute; inset: 0;
+  box-shadow: inset 0 0 0 3px var(--accent-soft);
+  pointer-events: none;
+}
+.sq--check { background: rgba(192, 96, 92, 0.34); }
+
+.board-actions {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+.turn-note { margin: 0; font-size: 12.5px; color: var(--ink-soft); }
+
+/* ── Clocks ─────────────────────────────────────────────────────────────── */
+/* Idle clocks sit in a well; the side to move rises and takes the accent. */
+.clock {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px;
+  border-radius: var(--radius);
+  box-shadow: var(--nm-inset-sm);
+  transition: box-shadow 200ms ease, color 200ms ease;
+}
+.clock__who {
+  font-size: 11px; font-weight: 600;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.clock__time {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 23px; font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.clock.is-active { box-shadow: var(--nm-raised-sm); }
+.clock.is-active .clock__time { color: var(--accent); }
+.clock.is-active .clock__who { color: var(--accent); }
+.clock.is-low .clock__time { color: var(--danger); }
+
+/* ── Status + moves ─────────────────────────────────────────────────────── */
+.status {
+  padding: 14px;
+  font-size: 13px; line-height: 1.55;
+  color: var(--ink-soft);
+  border-radius: 12px;
+  box-shadow: var(--nm-inset-sm);
+}
+.status strong { color: var(--ink); font-weight: 600; }
+.status.is-over strong { color: var(--accent); }
+
+.moves {
+  list-style: none;
+  margin: 0;
+  padding: 12px;
+  max-height: 260px;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: 26px 1fr 1fr;
+  gap: 3px 8px;
+  align-content: start;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 12px;
+  border-radius: 12px;
+  box-shadow: var(--nm-inset-sm);
+}
+.moves__no { color: var(--ink-faint); }
+.moves__ply {
+  padding: 3px 6px;
+  border-radius: 6px;
+  color: var(--ink);
+}
+.moves__ply.is-last {
+  color: var(--accent);
+  background: var(--accent-soft);
+  font-weight: 600;
+}
+.moves__empty {
+  grid-column: 1 / -1;
+  padding: 6px;
+  color: var(--ink-faint);
+  font-family: inherit;
+}
+
+/* ── Toast ──────────────────────────────────────────────────────────────── */
+.toast {
+  position: fixed;
+  left: 50%; bottom: 26px;
+  transform: translate(-50%, 18px);
+  padding: 13px 20px;
+  font-size: 13px; font-weight: 500;
+  color: var(--ink);
+  background: var(--surface);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--nm-raised-lg);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 220ms ease, transform 220ms ease;
+  z-index: 10;
+}
+.toast.is-visible { opacity: 1; transform: translate(-50%, 0); }
+.toast.is-error { color: var(--danger); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

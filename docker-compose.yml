@@ -78,5 +78,17 @@ services:
       session-manager:
         condition: service_started
 
+  # Static web client, fronted by NGINX which also proxies /graphql and /ws to
+  # the gateway so the browser only ever talks to one origin.
+  web:
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+    ports:
+      - "3000:80"
+    depends_on:
+      gateway:
+        condition: service_started
+
 volumes:
   pgdata:
