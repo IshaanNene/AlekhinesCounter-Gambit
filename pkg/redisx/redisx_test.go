@@ -15,7 +15,9 @@ func testClient(t *testing.T) *redis.Client {
 	t.Helper()
 	addr := os.Getenv("ACG_REDIS_ADDR")
 	if addr == "" {
-		addr = "localhost:6379"
+		// 6380, not 6379: see docker-compose.yml — a local Redis on the default
+		// port would answer instead, without the Stack modules.
+		addr = "localhost:6380"
 	}
 	ctx := context.Background()
 	client, err := Dial(ctx, addr)

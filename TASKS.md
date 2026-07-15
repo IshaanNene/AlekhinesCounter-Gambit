@@ -71,7 +71,8 @@ T1.1; supersedes the earlier per-service-module idea.)*
 **Fixed conventions (do not deviate without an ADR):**
 - **gRPC ports:** game-service `50051`, engine-worker `50052`, session-manager `50053`
 - **HTTP ports:** gateway `8080` (GraphQL at `/graphql`, WS at `/ws`, health at `/healthz`, metrics at `/metrics`)
-- **Infra ports (local host):** Postgres `5433` (host) → `5432` (container; 5433 avoids a common local Postgres on 5432), Redis `6379`, Kafka `9092`, MinIO `9000`/console `9001`. In-container/compose network, Postgres is reached as `postgres:5432`.
+- **Infra ports (local host):** Postgres `5433` (host) → `5432` (container; 5433 avoids a common local Postgres on 5432), Redis `6380` (host) → `6379` (container; 6380 avoids a common local Redis),
+  Kafka `9092`, MinIO `9000`/console `9001`. In-container/compose network, Postgres is reached as `postgres:5432`.
 - **Proto packages:** `alekhine.game.v1`, `alekhine.engine.v1`, `alekhine.session.v1`, `alekhine.auth.v1`. Go package option `github.com/IshaanNene/AlekhinesCounter-Gambit/proto/gen/go/<pkg>`.
 - **Config:** 12-factor. Read from env vars, prefix `ACG_` (e.g. `ACG_POSTGRES_DSN`). Provide sane localhost defaults.
   Known vars: `ACG_POSTGRES_DSN`, `ACG_GAME_ADDR` (game-service listen), `ACG_ENGINE_ADDR`,

@@ -31,17 +31,54 @@ services:
       - "50052:50052"
 
   redis:
-    image: redis:7-alpine
+    # Stack, not plain redis: Bloom (novelty / PGN dedupe) and TimeSeries
+    # (per-player anti-cheat series) ship as modules.
+    image: redis/redis-stack-server:7.4.0-v1
     # Cache + fanout only: nothing here is the source of truth, so an eviction
     # policy beats letting it fill up and start refusing writes.
-    command: ["redis-server", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru", "--save", ""]
+    environment:
+      # allkeys-lru would evict the Bloom filter and anti-cheat series, which are
+      # not reconstructible from a cache miss. volatile-lru only evicts keys we
+      # gave a TTL, so those structures survive pressure.
+      REDIS_ARGS: "--maxmemory 512mb --maxmemory-policy volatile-lru --save 60 1000"
     ports:
-      - "6379:6379"
+      # Host 6380: 6379 is commonly taken by a local Redis, which would silently
+      # win localhost and serve a module-less server to host-side tools.
+      - "6380:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 3s
       timeout: 3s
       retries: 10
+
+  # Kafka in KRaft mode: no ZooKeeper. The event backbone that decouples live
+  # play from the async analysis pipeline.
+  kafka:
+    image: apache/kafka:3.9.0
+    environment:
+      KAFKA_NODE_ID: "1"
+      KAFKA_PROCESS_ROLES: "broker,controller"
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka:9093"
+      KAFKA_LISTENERS: "PLAINTEXT://:9092,CONTROLLER://:9093"
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka:9092"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"
+      KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_INTER_BROKER_LISTENER_NAME: "PLAINTEXT"
+      # Single broker locally, so nothing can be replicated further than itself.
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: "0"
+      CLUSTER_ID: "alekhine-counter-gambit-01"
+    ports:
+      - "9092:9092"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list || exit 1"]
+      interval: 6s
+      timeout: 10s
+      retries: 20
+    volumes:
+      - kafkadata:/var/lib/kafka/data
 
   # Erlang/OTP: one supervised actor per live game (clocks, presence, reconnects).
   session-manager:
@@ -113,3 +150,5 @@ services:
 
 volumes:
   pgdata:
+  kafkadata:
+  miniodata:
