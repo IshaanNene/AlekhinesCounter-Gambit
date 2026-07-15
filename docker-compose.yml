@@ -60,5 +60,23 @@ services:
       session-manager:
         condition: service_started
 
+  # Public API: GraphQL over HTTP. Translates to internal gRPC; holds no state.
+  gateway:
+    build:
+      context: .
+      dockerfile: services/gateway/Dockerfile
+    environment:
+      ACG_GATEWAY_ADDR: ":8080"
+      ACG_GAME_ADDR_CLIENT: "game-service:50051"
+      ACG_SESSION_ADDR: "session-manager:50053"
+      ACG_GRAPHQL_PLAYGROUND: "true"
+    ports:
+      - "8080:8080"
+    depends_on:
+      game-service:
+        condition: service_started
+      session-manager:
+        condition: service_started
+
 volumes:
   pgdata:
