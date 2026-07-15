@@ -80,7 +80,9 @@ T1.1; supersedes the earlier per-service-module idea.)*
   `ACG_GATEWAY_ADDR` (gateway HTTP listen), `ACG_GAME_ADDR_CLIENT` (gateway → game-service),
   `ACG_GRAPHQL_PLAYGROUND`, `ACG_SESSION_SECRET` (**required** by the gateway; 32+ bytes,
   signs session JWTs), `ACG_COOKIE_SECURE` (set true behind HTTPS), `ACG_MAIL_ENABLED`
-  (false returns passwordless tokens in-band for local dev instead of emailing them).
+  (false returns passwordless tokens in-band for local dev instead of emailing them),
+  `ACG_REDIS_ADDR` (empty disables the eval cache, rate limiting, and cross-replica
+  fanout — the platform still works, on one replica).
 - **Logging:** structured JSON via `log/slog`. Every service logs a startup line with its version + listen addr.
 - **Errors:** wrap with `fmt.Errorf("...: %w", err)`. gRPC handlers return proper `status.Error` codes.
 - **Chess notation:** positions are FEN strings; moves are UCI long algebraic (e.g. `e2e4`, `e7e8q`).
@@ -314,7 +316,7 @@ outcomes — expand each into T-level subtasks when you start the epic.
 **Acceptance:** a subscriber receives move/clock events pushed in real time.
 **Commit:** `feat(gateway): websocket subscriptions for live games`
 
-### [ ] T2.7 — Redis: pub/sub fanout, eval cache, rate limit, sessions
+### [x] T2.7 — Redis: pub/sub fanout, eval cache, rate limit, sessions
 **Depends on:** T2.6
 **Context:** Redis pub/sub so any gateway replica pushes to any client; FEN→eval cache read-through in game-service/engine path; token-bucket rate limiting; JWT/session store.
 **Acceptance:** two gateway replicas both deliver updates to their clients; repeated position served from cache (observable via a cache-hit metric/log).
@@ -442,6 +444,6 @@ observable in Grafana + Jaeger, load-tested with autoscaling — reproducible fr
 
 ## Progress tracker
 - Q1: ☑ T1.1 ☑ T1.2 ☑ T1.3 ☑ T1.4 ☑ T1.5 ☑ T1.6 ☑ T1.7 ☑ T1.8 ☑ T1.9
-- Q2: ☑ T2.1 ☑ T2.2 ☑ T2.3 ☑ T2.4 ☑ T2.5 ☑ T2.6 ☐ T2.7 ☐ T2.8
+- Q2: ☑ T2.1 ☑ T2.2 ☑ T2.3 ☑ T2.4 ☑ T2.5 ☑ T2.6 ☑ T2.7 ☐ T2.8
 - Q3: ☐ T3.1 ☐ T3.2 ☐ T3.3 ☐ T3.4 ☐ T3.5 ☐ T3.6
 - Q4: ☐ T4.1 ☐ T4.2 ☐ T4.3 ☐ T4.4 ☐ T4.5 ☐ T4.6 ☐ T4.7 ☐ T4.8 ☐ T4.9 ☐ T4.10

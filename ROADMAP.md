@@ -142,13 +142,15 @@ boards in real time; a spectator can watch; disconnect/reconnect is handled.
 ### Epic 2.3 — Real-time transport (WebSockets)
 - [x] WebSocket endpoint for board/clock updates (graphql-transport-ws at `/ws`)
 - [x] Web client: neumorphic board, live via subscription, NGINX-fronted
-- [ ] Redis pub/sub fanout so any gateway replica can push to any client (T2.7)
-- [ ] Presence tracking (who's connected / spectating) (T2.7)
+- [x] Redis pub/sub fanout so any gateway replica can push to any client
+- [ ] Presence tracking (who's connected / spectating) — session-manager tracks
+      it internally; not yet surfaced through GraphQL
 
 ### Epic 2.4 — Redis integration
-- [ ] Position→eval cache (transposition-style, keyed by FEN)
-- [ ] Rate limiting on API + moves
-- [ ] Session/token store
+- [x] Position→eval cache (keyed by FEN + depth) — 355ms → 46ms on a repeat
+- [x] Rate limiting on API + moves (distributed token bucket, Lua)
+- [x] Session store — not needed: JWTs are stateless and self-verifying, so
+      there is nothing to store. Redis stays a pure cache/bus.
 
 ### Epic 2.5 — Matchmaking
 - [x] Open seats: create a game, share the link, opponent joins as themselves

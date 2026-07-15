@@ -30,6 +30,19 @@ services:
     ports:
       - "50052:50052"
 
+  redis:
+    image: redis:7-alpine
+    # Cache + fanout only: nothing here is the source of truth, so an eviction
+    # policy beats letting it fill up and start refusing writes.
+    command: ["redis-server", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru", "--save", ""]
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
   # Erlang/OTP: one supervised actor per live game (clocks, presence, reconnects).
   session-manager:
     build:
@@ -49,11 +62,14 @@ services:
       ACG_ENGINE_ADDR: "engine-worker:50052"
       ACG_SESSION_ADDR: "session-manager:50053"
       ACG_POSTGRES_DSN: "postgres://acg:acg@postgres:5432/acg?sslmode=disable"
+      ACG_REDIS_ADDR: "redis:6379"
       ACG_RUN_MIGRATIONS: "true"
     ports:
       - "50051:50051"
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
       engine-worker:
         condition: service_started
@@ -74,6 +90,7 @@ services:
       # out of source control (Q4 moves this to a Kubernetes Secret).
       ACG_SESSION_SECRET: "dev-only-secret-change-me-in-production-32b"
       ACG_COOKIE_SECURE: "false"
+      ACG_REDIS_ADDR: "redis:6379"
     ports:
       - "8080:8080"
     depends_on:

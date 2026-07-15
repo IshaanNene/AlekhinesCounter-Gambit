@@ -73,7 +73,13 @@ manager is live and bridged to Go over gRPC:
 - **Web client** (`web/`) — a dependency-free neumorphic UI served by NGINX,
   which also proxies `/graphql` and `/ws` so the browser sees one origin.
   Play Stockfish or share a link and watch the board update live in both tabs.
-- `make up` now runs all six services: Postgres, engine-worker,
+- **Auth** — three ways in (guest / password / passwordless token), JWT sessions
+  in an httpOnly cookie. Identity comes from the session, never the request body.
+- **Ratings & history** — Elo with a tiered K-factor, applied idempotently on
+  completion; per-user history and a leaderboard.
+- **Redis** — cross-replica pub/sub fanout, a FEN+depth evaluation cache
+  (355ms → 46ms on a repeat position), and a distributed token-bucket limiter.
+- `make up` now runs all seven services: Postgres, Redis, engine-worker,
   session-manager, game-service, gateway, web (**open http://localhost:3000**).
 
 Play a whole game over GraphQL:
