@@ -15,6 +15,9 @@ import (
 // ErrNotFound is returned when a requested row does not exist.
 var ErrNotFound = errors.New("not found")
 
+// ErrNotInProgress means the game exists but is already finished.
+var ErrNotInProgress = errors.New("game is not in progress")
+
 // Game is a stored game row (moves are loaded separately).
 type Game struct {
 	ID          string
@@ -197,6 +200,23 @@ func (s *Store) AppendMove(ctx context.Context, gameID string, m Move, status, e
 	}
 
 	return tx.Commit(ctx)
+}
+
+// EndGame closes a game that ended without a move being played (e.g. a
+// resignation). It is a no-op on a game that is already finished, so a repeated
+// or racing request cannot overwrite the original result.
+func (s *Store) EndGame(ctx context.Context, gameID, status, endReason string) error {
+	tag, err := s.pool.Exec(ctx,
+		`UPDATE games SET status = $1, end_reason = $2, ended_at = now()
+		 WHERE id = $3 AND status = 'IN_PROGRESS'`,
+		status, endReason, gameID)
+	if err != nil {
+		return fmt.Errorf("end game: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotInProgress
+	}
+	return nil
 }
 
 // MoveCount returns the number of moves recorded for a game.

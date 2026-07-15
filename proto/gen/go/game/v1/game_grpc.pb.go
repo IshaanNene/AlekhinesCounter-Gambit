@@ -22,6 +22,7 @@ const (
 	GameService_CreateGame_FullMethodName = "/alekhine.game.v1.GameService/CreateGame"
 	GameService_SubmitMove_FullMethodName = "/alekhine.game.v1.GameService/SubmitMove"
 	GameService_GetGame_FullMethodName    = "/alekhine.game.v1.GameService/GetGame"
+	GameService_Resign_FullMethodName     = "/alekhine.game.v1.GameService/Resign"
 )
 
 // GameServiceClient is the client API for GameService service.
@@ -37,6 +38,8 @@ type GameServiceClient interface {
 	SubmitMove(ctx context.Context, in *SubmitMoveRequest, opts ...grpc.CallOption) (*SubmitMoveResponse, error)
 	// GetGame returns a game and its full move list.
 	GetGame(ctx context.Context, in *GetGameRequest, opts ...grpc.CallOption) (*GetGameResponse, error)
+	// Resign ends a game in the opponent's favour.
+	Resign(ctx context.Context, in *ResignRequest, opts ...grpc.CallOption) (*ResignResponse, error)
 }
 
 type gameServiceClient struct {
@@ -77,6 +80,16 @@ func (c *gameServiceClient) GetGame(ctx context.Context, in *GetGameRequest, opt
 	return out, nil
 }
 
+func (c *gameServiceClient) Resign(ctx context.Context, in *ResignRequest, opts ...grpc.CallOption) (*ResignResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ResignResponse)
+	err := c.cc.Invoke(ctx, GameService_Resign_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // GameServiceServer is the server API for GameService service.
 // All implementations must embed UnimplementedGameServiceServer
 // for forward compatibility.
@@ -90,6 +103,8 @@ type GameServiceServer interface {
 	SubmitMove(context.Context, *SubmitMoveRequest) (*SubmitMoveResponse, error)
 	// GetGame returns a game and its full move list.
 	GetGame(context.Context, *GetGameRequest) (*GetGameResponse, error)
+	// Resign ends a game in the opponent's favour.
+	Resign(context.Context, *ResignRequest) (*ResignResponse, error)
 	mustEmbedUnimplementedGameServiceServer()
 }
 
@@ -108,6 +123,9 @@ func (UnimplementedGameServiceServer) SubmitMove(context.Context, *SubmitMoveReq
 }
 func (UnimplementedGameServiceServer) GetGame(context.Context, *GetGameRequest) (*GetGameResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetGame not implemented")
+}
+func (UnimplementedGameServiceServer) Resign(context.Context, *ResignRequest) (*ResignResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Resign not implemented")
 }
 func (UnimplementedGameServiceServer) mustEmbedUnimplementedGameServiceServer() {}
 func (UnimplementedGameServiceServer) testEmbeddedByValue()                     {}
@@ -184,6 +202,24 @@ func _GameService_GetGame_Handler(srv interface{}, ctx context.Context, dec func
 	return interceptor(ctx, in, info, handler)
 }
 
+func _GameService_Resign_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResignRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GameServiceServer).Resign(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: GameService_Resign_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GameServiceServer).Resign(ctx, req.(*ResignRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // GameService_ServiceDesc is the grpc.ServiceDesc for GameService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -202,6 +238,10 @@ var GameService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetGame",
 			Handler:    _GameService_GetGame_Handler,
+		},
+		{
+			MethodName: "Resign",
+			Handler:    _GameService_Resign_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

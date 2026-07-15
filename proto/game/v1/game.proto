@@ -13,6 +13,8 @@ service GameService {
   rpc SubmitMove(SubmitMoveRequest) returns (SubmitMoveResponse);
   // GetGame returns a game and its full move list.
   rpc GetGame(GetGameRequest) returns (GetGameResponse);
+  // Resign ends a game in the opponent's favour.
+  rpc Resign(ResignRequest) returns (ResignResponse);
 }
 
 // Status is the lifecycle state / result of a game.
@@ -96,5 +98,15 @@ message GetGameRequest {
 }
 
 message GetGameResponse {
+  Game game = 1;
+}
+
+message ResignRequest {
+  string game_id = 1;
+  // The player giving up; must be a participant.
+  string player_id = 2;
+}
+
+message ResignResponse {
   Game game = 1;
 }

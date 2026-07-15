@@ -118,7 +118,8 @@ func (s *Server) SubmitMove(ctx context.Context, req *gamev1.SubmitMoveRequest) 
 
 	after, err := board.ApplyUCI(req.GetUci())
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "illegal move: %v", err)
+		// The chess package's error already reads "illegal move: e2e5".
+		return nil, status.Errorf(codes.InvalidArgument, "%v", err)
 	}
 	history = append(history, after.FEN())
 
@@ -183,6 +184,56 @@ func (s *Server) playEngineReply(ctx context.Context, g *store.Game, after *ches
 		return status.Errorf(codes.Internal, "persist engine move: %v", err)
 	}
 	return nil
+}
+
+// Resign ends a game in the opponent's favour. Either participant may resign at
+// any point while the game is in progress; it is not turn-dependent.
+func (s *Server) Resign(ctx context.Context, req *gamev1.ResignRequest) (*gamev1.ResignResponse, error) {
+	if req.GetGameId() == "" || req.GetPlayerId() == "" {
+		return nil, status.Error(codes.InvalidArgument, "game_id and player_id are required")
+	}
+
+	g, _, err := s.store.GetGame(ctx, req.GetGameId())
+	if errors.Is(err, store.ErrNotFound) {
+		return nil, status.Error(codes.NotFound, "game not found")
+	}
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "load game: %v", err)
+	}
+
+	// Identify the resigning side; the opponent wins.
+	var winner chess.Result
+	switch req.GetPlayerId() {
+	case g.WhiteID:
+		winner = chess.BlackWins
+	case g.BlackID:
+		winner = chess.WhiteWins
+	default:
+		return nil, status.Error(codes.PermissionDenied, "player is not in this game")
+	}
+
+	err = s.store.EndGame(ctx, g.ID, resultToDB(winner), "RESIGNATION")
+	if errors.Is(err, store.ErrNotInProgress) {
+		return nil, status.Error(codes.FailedPrecondition, "game is already over")
+	}
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "end game: %v", err)
+	}
+
+	// Mirror the result into the live session so its clocks stop.
+	if !g.VsEngine && s.session.Enabled() {
+		sctx, cancel := context.WithTimeout(ctx, sessionTimeout)
+		defer cancel()
+		if _, err := s.session.Resign(sctx, g.ID, req.GetPlayerId()); err != nil {
+			s.log.Warn("session resign failed", "game_id", g.ID, "error", err)
+		}
+	}
+
+	updated, moves, err := s.store.GetGame(ctx, g.ID)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "reload game: %v", err)
+	}
+	return &gamev1.ResignResponse{Game: toProtoGame(updated, moves)}, nil
 }
 
 // authorizeMover checks that playerID owns the side to move.
