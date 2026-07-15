@@ -24,6 +24,7 @@ const (
 	GameService_GetGame_FullMethodName     = "/alekhine.game.v1.GameService/GetGame"
 	GameService_Resign_FullMethodName      = "/alekhine.game.v1.GameService/Resign"
 	GameService_CreateGuest_FullMethodName = "/alekhine.game.v1.GameService/CreateGuest"
+	GameService_LegalMoves_FullMethodName  = "/alekhine.game.v1.GameService/LegalMoves"
 )
 
 // GameServiceClient is the client API for GameService service.
@@ -44,6 +45,10 @@ type GameServiceClient interface {
 	// CreateGuest mints an anonymous user so a client can play before real
 	// accounts exist (auth arrives in T2.8).
 	CreateGuest(ctx context.Context, in *CreateGuestRequest, opts ...grpc.CallOption) (*CreateGuestResponse, error)
+	// LegalMoves lists every legal move in a game's current position. Clients use
+	// it to highlight destinations and validate premoves without reimplementing
+	// move generation — the rules stay in one place.
+	LegalMoves(ctx context.Context, in *LegalMovesRequest, opts ...grpc.CallOption) (*LegalMovesResponse, error)
 }
 
 type gameServiceClient struct {
@@ -104,6 +109,16 @@ func (c *gameServiceClient) CreateGuest(ctx context.Context, in *CreateGuestRequ
 	return out, nil
 }
 
+func (c *gameServiceClient) LegalMoves(ctx context.Context, in *LegalMovesRequest, opts ...grpc.CallOption) (*LegalMovesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(LegalMovesResponse)
+	err := c.cc.Invoke(ctx, GameService_LegalMoves_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // GameServiceServer is the server API for GameService service.
 // All implementations must embed UnimplementedGameServiceServer
 // for forward compatibility.
@@ -122,6 +137,10 @@ type GameServiceServer interface {
 	// CreateGuest mints an anonymous user so a client can play before real
 	// accounts exist (auth arrives in T2.8).
 	CreateGuest(context.Context, *CreateGuestRequest) (*CreateGuestResponse, error)
+	// LegalMoves lists every legal move in a game's current position. Clients use
+	// it to highlight destinations and validate premoves without reimplementing
+	// move generation — the rules stay in one place.
+	LegalMoves(context.Context, *LegalMovesRequest) (*LegalMovesResponse, error)
 	mustEmbedUnimplementedGameServiceServer()
 }
 
@@ -146,6 +165,9 @@ func (UnimplementedGameServiceServer) Resign(context.Context, *ResignRequest) (*
 }
 func (UnimplementedGameServiceServer) CreateGuest(context.Context, *CreateGuestRequest) (*CreateGuestResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateGuest not implemented")
+}
+func (UnimplementedGameServiceServer) LegalMoves(context.Context, *LegalMovesRequest) (*LegalMovesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method LegalMoves not implemented")
 }
 func (UnimplementedGameServiceServer) mustEmbedUnimplementedGameServiceServer() {}
 func (UnimplementedGameServiceServer) testEmbeddedByValue()                     {}
@@ -258,6 +280,24 @@ func _GameService_CreateGuest_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _GameService_LegalMoves_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(LegalMovesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GameServiceServer).LegalMoves(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: GameService_LegalMoves_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GameServiceServer).LegalMoves(ctx, req.(*LegalMovesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // GameService_ServiceDesc is the grpc.ServiceDesc for GameService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -284,6 +324,10 @@ var GameService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CreateGuest",
 			Handler:    _GameService_CreateGuest_Handler,
+		},
+		{
+			MethodName: "LegalMoves",
+			Handler:    _GameService_LegalMoves_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

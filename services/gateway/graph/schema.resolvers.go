@@ -100,6 +100,20 @@ func (r *queryResolver) Game(ctx context.Context, id string) (*model.Game, error
 	return toModelGame(resp.GetGame()), nil
 }
 
+// LegalMoves is the resolver for the legalMoves field.
+func (r *queryResolver) LegalMoves(ctx context.Context, gameID string) ([]string, error) {
+	resp, err := r.Upstream.Game.LegalMoves(ctx, &gamev1.LegalMovesRequest{GameId: gameID})
+	if err != nil {
+		return nil, err
+	}
+	// Never nil: the schema promises a list, and "no legal moves" (checkmate or
+	// stalemate) is a legitimate empty answer, not an error.
+	if resp.GetUci() == nil {
+		return []string{}, nil
+	}
+	return resp.GetUci(), nil
+}
+
 // Health is the resolver for the health field.
 func (r *queryResolver) Health(ctx context.Context) (string, error) {
 	return "ok", nil

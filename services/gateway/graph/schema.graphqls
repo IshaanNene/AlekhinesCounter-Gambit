@@ -75,6 +75,12 @@ type Game {
 type Query {
   "Fetch a game and its full move list."
   game(id: ID!): Game
+  """
+  Every legal move in a game's current position, in UCI notation. Backed by the
+  same move generator the server validates with, so clients can highlight
+  destinations and screen premoves without a second, divergent rules engine.
+  """
+  legalMoves(gameId: ID!): [String!]!
   "Liveness probe for clients."
   health: String!
 }

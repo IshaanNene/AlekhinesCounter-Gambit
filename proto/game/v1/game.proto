@@ -18,6 +18,10 @@ service GameService {
   // CreateGuest mints an anonymous user so a client can play before real
   // accounts exist (auth arrives in T2.8).
   rpc CreateGuest(CreateGuestRequest) returns (CreateGuestResponse);
+  // LegalMoves lists every legal move in a game's current position. Clients use
+  // it to highlight destinations and validate premoves without reimplementing
+  // move generation — the rules stay in one place.
+  rpc LegalMoves(LegalMovesRequest) returns (LegalMovesResponse);
 }
 
 // Status is the lifecycle state / result of a game.
@@ -112,6 +116,16 @@ message ResignRequest {
 
 message ResignResponse {
   Game game = 1;
+}
+
+message LegalMovesRequest {
+  string game_id = 1;
+}
+
+message LegalMovesResponse {
+  // Legal moves in UCI notation for the side to move. Empty when the game is
+  // over (checkmate or stalemate).
+  repeated string uci = 1;
 }
 
 message CreateGuestRequest {}

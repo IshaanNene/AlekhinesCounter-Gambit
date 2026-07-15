@@ -186,6 +186,33 @@ func (s *Server) playEngineReply(ctx context.Context, g *store.Game, after *ches
 	return nil
 }
 
+// LegalMoves returns every legal move in the game's current position, so
+// clients can highlight destinations and screen premoves without shipping a
+// second move generator that could disagree with this one.
+func (s *Server) LegalMoves(ctx context.Context, req *gamev1.LegalMovesRequest) (*gamev1.LegalMovesResponse, error) {
+	if req.GetGameId() == "" {
+		return nil, status.Error(codes.InvalidArgument, "game_id is required")
+	}
+	g, _, err := s.store.GetGame(ctx, req.GetGameId())
+	if errors.Is(err, store.ErrNotFound) {
+		return nil, status.Error(codes.NotFound, "game not found")
+	}
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "load game: %v", err)
+	}
+	board, err := chess.ParseFEN(g.FEN)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "corrupt stored fen: %v", err)
+	}
+
+	moves := board.LegalMoves()
+	out := make([]string, 0, len(moves))
+	for _, m := range moves {
+		out = append(out, m.String())
+	}
+	return &gamev1.LegalMovesResponse{Uci: out}, nil
+}
+
 // CreateGuest mints an anonymous user. It exists so clients can obtain a player
 // identity before real accounts/auth land (T2.8).
 func (s *Server) CreateGuest(ctx context.Context, _ *gamev1.CreateGuestRequest) (*gamev1.CreateGuestResponse, error) {
