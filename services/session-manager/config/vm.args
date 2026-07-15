@@ -1,0 +1,11 @@
+## Erlang VM args for the session-manager release.
+##
+## The release boot scripts require a node name even though we do not rely on
+## Erlang distribution (the service is reached over gRPC). Binding the node to
+## 127.0.0.1 keeps the distribution port loopback-only inside the container.
+-name session_manager@127.0.0.1
+-setcookie acg_session_manager
+
+## Kernel poll and async threads for I/O-heavy serving.
++K true
++A 30

@@ -1,0 +1,11 @@
+{application, session_manager, [
+    {description, "Alekhine session manager: one supervised actor per live game (clocks, players, spectators, reconnects)."},
+    {vsn, "0.1.0"},
+    {registered, [session_manager_sup, sm_game_sup, sm_registry]},
+    {mod, {session_manager_app, []}},
+    {applications, [kernel, stdlib, grpcbox]},
+    %% start_grpc is disabled by unit tests so they never bind a port.
+    {env, [{start_grpc, true}, {grpc_port, 50053}]},
+    {modules, []},
+    {licenses, ["MIT"]}
+]}.
