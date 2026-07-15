@@ -12,11 +12,12 @@ import (
 	"log/slog"
 	"time"
 
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/analysis"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/chess"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/redisx"
 	analysisv1 "github.com/IshaanNene/AlekhinesCounter-Gambit/proto/gen/go/analysis/v1"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // Engine evaluates positions.

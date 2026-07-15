@@ -64,7 +64,11 @@ test: ## Run all Go unit tests
 lint: ## Run gofmt check, go vet, and golangci-lint
 	@test -z "$$(gofmt -l . | grep -v /gen/)" || (echo "gofmt needed:"; gofmt -l . | grep -v /gen/; exit 1)
 	go vet ./...
-	@command -v golangci-lint >/dev/null 2>&1 && golangci-lint run || echo "(golangci-lint not installed; run 'make tools')"
+	@if command -v golangci-lint >/dev/null 2>&1; then \
+		golangci-lint run; \
+	else \
+		echo "(golangci-lint not installed; run 'make tools')"; \
+	fi
 
 .PHONY: tidy
 tidy: ## go mod tidy
