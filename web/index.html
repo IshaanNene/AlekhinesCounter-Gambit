@@ -20,6 +20,10 @@
         </div>
       </div>
       <div class="topbar__right">
+        <button class="account" id="account-btn" aria-haspopup="dialog">
+          <span class="account__elo" id="account-elo">—</span>
+          <span class="account__name" id="account-name">Sign in</span>
+        </button>
         <div class="status-pill" id="conn" data-state="offline">
           <span class="status-pill__dot" aria-hidden="true"></span>
           <span id="conn-text">connecting…</span>
@@ -63,9 +67,15 @@
           </div>
         </section>
 
+        <section class="block" id="join-block" hidden>
+          <h2 class="block__title">Open seat</h2>
+          <p class="hint">This game is waiting for an opponent.</p>
+          <button class="btn btn--primary" id="join-game">Join as Black</button>
+        </section>
+
         <section class="block" id="share-block" hidden>
           <h2 class="block__title">Share</h2>
-          <p class="hint">Open this link in another tab to watch or play the other side.</p>
+          <p class="hint">Send this link to your opponent, or open it to spectate.</p>
           <div class="share">
             <input class="input input--mono" id="share-link" readonly />
             <button class="btn btn--icon" id="copy-link" title="Copy link" aria-label="Copy link">⧉</button>
@@ -74,11 +84,7 @@
 
         <section class="block" id="side-block" hidden>
           <h2 class="block__title">You are</h2>
-          <div class="segmented" role="group" aria-label="Choose your side">
-            <button class="segmented__btn" data-side="w">White</button>
-            <button class="segmented__btn" data-side="b">Black</button>
-            <button class="segmented__btn is-active" data-side="s">Spectator</button>
-          </div>
+          <div class="role" id="role">Spectator</div>
           <button class="btn btn--danger" id="resign" disabled>Resign</button>
         </section>
       </aside>
@@ -124,6 +130,67 @@
       </aside>
 
     </main>
+  </div>
+
+  <!-- Account: sign in three ways, or view profile + history -->
+  <div class="scrim" id="account-scrim" hidden>
+    <div class="dialog dialog--wide" role="dialog" aria-modal="true" aria-labelledby="account-title">
+      <div class="drawer__head">
+        <h2 class="dialog__title" id="account-title">Sign in</h2>
+        <button class="btn btn--icon btn--ghost" id="account-close" aria-label="Close">✕</button>
+      </div>
+
+      <div id="signed-out">
+        <button class="btn btn--primary" id="do-guest">Play as guest — no signup</button>
+        <p class="hint" style="margin:10px 0 18px">Your games and rating are kept, and you can claim the account later.</p>
+
+        <div class="tabs" role="tablist">
+          <button class="tabs__btn is-active" data-tab="password" role="tab">Password</button>
+          <button class="tabs__btn" data-tab="magic" role="tab">Email link</button>
+        </div>
+
+        <form class="form" id="tab-password">
+          <input class="input" id="auth-identifier" placeholder="Username or email" autocomplete="username" />
+          <input class="input" id="auth-password" type="password" placeholder="Password" autocomplete="current-password" />
+          <input class="input" id="auth-email" type="email" placeholder="Email (only when creating an account)" autocomplete="email" />
+          <div class="form__actions">
+            <button class="btn" id="do-login" type="button">Sign in</button>
+            <button class="btn btn--primary" id="do-register" type="button">Create account</button>
+          </div>
+        </form>
+
+        <form class="form" id="tab-magic" hidden>
+          <input class="input" id="magic-email" type="email" placeholder="you@example.com" autocomplete="email" />
+          <button class="btn" id="do-magic" type="button">Send me a sign-in link</button>
+          <div id="magic-result" hidden>
+            <p class="hint">No mail provider is configured, so the link is shown here:</p>
+            <div class="share">
+              <input class="input input--mono" id="magic-token" readonly />
+              <button class="btn btn--icon" id="do-redeem" title="Use it">→</button>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      <div id="signed-in" hidden>
+        <div class="profile">
+          <div class="profile__row"><span>Signed in as</span><strong id="prof-name">—</strong></div>
+          <div class="profile__row"><span>Rating</span><strong id="prof-elo">—</strong></div>
+          <div class="profile__row"><span>Games</span><strong id="prof-games">—</strong></div>
+        </div>
+        <div id="upgrade-block" hidden>
+          <p class="hint" style="margin:14px 0 10px">
+            You are playing as a guest. Claim your account to keep this rating and history for good.
+          </p>
+          <button class="btn btn--primary" id="do-upgrade">Claim this account</button>
+        </div>
+        <h3 class="block__title" style="margin-top:20px">Recent games</h3>
+        <ol class="history" id="history"></ol>
+        <div class="form__actions" style="margin-top:16px">
+          <button class="btn btn--ghost" id="do-logout">Sign out</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Settings drawer, rendered from SETTINGS_SCHEMA -->

@@ -55,21 +55,35 @@ export class Subscriber {
   }
 
   subscribe(query, variables, onNext) {
-    this.#active = { query, variables, onNext };
+    // Stop the previous subscription first. Without this the server keeps
+    // pushing the old game down the same socket, and since `next` frames were
+    // matched only by handler (not id), those stale updates were applied as if
+    // they belonged to the game now on screen.
+    this.#stopActive();
+    this.#active = { id: String(this.#nextId++), query, variables, onNext };
     if (this.#acked) this.#send(this.#startMessage());
     else this.#connect();
+  }
+
+  /** Tell the server we are done with the current subscription. */
+  #stopActive() {
+    if (this.#active && this.#acked) {
+      this.#send({ id: this.#active.id, type: "complete" });
+    }
+    this.#active = null;
   }
 
   close() {
     this.#closedByUs = true;
     clearTimeout(this.#reconnectTimer);
+    this.#stopActive();
     this.#socket?.close();
     this.#socket = null;
   }
 
   #startMessage() {
     return {
-      id: String(this.#nextId++),
+      id: this.#active.id,
       type: "subscribe",
       payload: { query: this.#active.query, variables: this.#active.variables },
     };
@@ -102,7 +116,9 @@ export class Subscriber {
           if (this.#active) this.#send(this.#startMessage());
           break;
         case "next":
-          this.#active?.onNext(msg.payload?.data);
+          // Only accept frames for the subscription we currently want: a
+          // lingering one from a previous game must never overwrite this one.
+          if (msg.id === this.#active?.id) this.#active.onNext(msg.payload?.data);
           break;
         case "error":
           this.onState("error", msg.payload?.[0]?.message ?? "subscription error");

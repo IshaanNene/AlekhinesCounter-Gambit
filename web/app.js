@@ -10,6 +10,7 @@
 import { gql, GraphQLError, Subscriber } from "./graphql.js";
 import * as settings from "./settings.js";
 import { mountSettings } from "./settings-ui.js";
+import { mountAccount, refreshMe, ensureSignedIn, onAccountChange, me } from "./account.js";
 import {
   parseFEN, parseUCI, squareName, glyphFor, boardOrder,
   isLightSquare, needsPromotion, formatClock, fileOf, rankOf,
@@ -18,15 +19,15 @@ import {
 /* ── GraphQL documents ──────────────────────────────────────────────────── */
 
 const GAME_FIELDS = `
-  id fen status endReason vsEngine whiteId blackId
+  id fen status endReason vsEngine awaitingOpponent whiteId blackId
   moves { ply uci }
   clock { whiteMs blackMs turn running }
 `;
 
-const CREATE_GUEST = `mutation { createGuest { id username } }`;
 const CREATE_GAME = `mutation($in: CreateGameInput!) { createGame(input: $in) { ${GAME_FIELDS} } }`;
 const MOVE = `mutation($in: MoveInput!) { move(input: $in) { ${GAME_FIELDS} } }`;
 const RESIGN = `mutation($in: ResignInput!) { resign(input: $in) { ${GAME_FIELDS} } }`;
+const JOIN = `mutation($id: ID!) { joinGame(gameId: $id) { ${GAME_FIELDS} } }`;
 const GET_GAME = `query($id: ID!) { game(id: $id) { ${GAME_FIELDS} } }`;
 const LEGAL = `query($id: ID!) { legalMoves(gameId: $id) }`;
 const ON_GAME = `subscription($id: ID!) { gameUpdated(gameId: $id) { ${GAME_FIELDS} } }`;
@@ -97,14 +98,15 @@ function beep() {
 
 /* ── Identity ───────────────────────────────────────────────────────────── */
 
-// A guest id stands in for a real account until auth lands (T2.8). Persisted so
-// a refresh keeps your seat at the board.
-async function myGuestId() {
-  const cached = localStorage.getItem("acg.guestId");
-  if (cached) return cached;
-  const { createGuest } = await gql(CREATE_GUEST);
-  localStorage.setItem("acg.guestId", createGuest.id);
-  return createGuest.id;
+/**
+ * Which seat the signed-in user holds in this game. Derived from the session —
+ * never chosen — so the board can only ever act as who you actually are.
+ */
+function sideFor(game, user) {
+  if (!game || !user) return "s";
+  if (game.whiteId === user.id) return "w";
+  if (game.blackId === user.id) return "b";
+  return "s";
 }
 
 /* ── Settings application ───────────────────────────────────────────────── */
@@ -297,12 +299,17 @@ function renderControls() {
   const g = state.game;
   $("share-block").hidden = !g;
   $("side-block").hidden = !g;
+  // Offer the open seat only to someone who could actually take it.
+  $("join-block").hidden = !(g && g.awaitingOpponent && state.side === "s" && me && g.whiteId !== me.id);
+
   if (g) {
     $("share-link").value = `${location.origin}${location.pathname}#${g.id}`;
-    $("resign").disabled = g.status !== "IN_PROGRESS" || state.side === "s";
-  }
-  for (const btn of document.querySelectorAll(".segmented__btn")) {
-    btn.classList.toggle("is-active", btn.dataset.side === state.side);
+    $("resign").disabled =
+      g.status !== "IN_PROGRESS" || state.side === "s" || g.awaitingOpponent;
+    $("role").textContent =
+      state.side === "w" ? "White" :
+      state.side === "b" ? "Black" :
+      g.awaitingOpponent ? "Spectator — seat open" : "Spectator";
   }
 }
 
@@ -347,7 +354,10 @@ async function refreshLegal() {
 function applyGame(game) {
   if (!game) return;
   const prevTurn = state.board?.turn;
+  const isNewGame = game.id !== state.game?.id;
   state.game = game;
+  if (isNewGame) syncSide();
+  else state.side = sideFor(game, me); // a join can change our seat mid-stream
   state.board = parseFEN(game.fen);
   state.clock = game.clock ? { ...game.clock, at: Date.now() } : null;
   if (prevTurn !== state.board.turn) state.selected = null;
@@ -377,11 +387,9 @@ async function openGame(id, { subscribe = true } = {}) {
 const myTurn = () =>
   Boolean(state.game) &&
   state.game.status === "IN_PROGRESS" &&
+  !state.game.awaitingOpponent &&
   state.side !== "s" &&
   state.board?.turn === state.side;
-
-const playerIdForSide = (side) =>
-  !state.game ? null : side === "w" ? state.game.whiteId : state.game.blackId;
 
 /* ── Interaction: click ─────────────────────────────────────────────────── */
 
@@ -584,13 +592,7 @@ async function submitMove(from, to, promotion) {
   renderBoard();
 
   try {
-    const data = await gql(MOVE, {
-      in: {
-        gameId: state.game.id,
-        uci,
-        playerId: state.game.vsEngine ? null : playerIdForSide(state.side),
-      },
-    });
+    const data = await gql(MOVE, { in: { gameId: state.game.id, uci } });
     applyGame(data.move);
   } catch (err) {
     // The server is the referee: surface its verdict rather than guessing.
@@ -672,19 +674,26 @@ const timeControl = () => ({
   incrementMs: Math.max(0, Number($("increment").value || 0)) * 1000,
 });
 
-function startGame(game, side) {
-  setSide(side);
+function startGame(game) {
   state.premove = null;
   state.lowTimeFired = false;
-  state.flipped = !settings.get("whiteOnBottom") && side === "b";
+  state.game = null; // force a fresh seat computation
   applyGame(game);
   location.hash = game.id;
   subscriber.subscribe(ON_GAME, { id: game.id }, (p) => applyGame(p?.gameUpdated));
 }
 
-function init() {
+async function init() {
   mountSettings({ openButton: $("open-settings"), drawer: $("settings-drawer") });
+  mountAccount({ toast, friendlyError, onOpenGame: (id) => openGame(id) });
   applySettings();
+
+  // Signing in or out changes which seat we hold, so re-render the board.
+  onAccountChange(() => {
+    if (state.game) state.side = sideFor(state.game, me);
+    render();
+  });
+  await refreshMe();
 
   // Re-apply and re-render on any preference change, so toggles take effect
   // immediately rather than on the next move.
@@ -696,25 +705,31 @@ function init() {
   $("depth").addEventListener("input", (e) => { $("depth-out").value = e.target.value; });
 
   press($("new-engine"), async () => {
-    const me = await myGuestId();
+    // Signing in as a guest is one call, so "play now" never hits a signup wall.
+    await ensureSignedIn();
     const data = await gql(CREATE_GAME, {
-      in: { whiteId: me, engineDepth: Number($("depth").value) },
+      in: { vsEngine: true, engineDepth: Number($("depth").value) },
     });
-    startGame(data.createGame, "w");
+    startGame(data.createGame);
     toast("New game against Stockfish.");
   });
 
   press($("new-human"), async () => {
-    // Two identities so both seats exist; without auth either tab may claim
-    // either side, which is what makes the share link demo work.
-    const white = await myGuestId();
-    const { createGuest: black } = await gql(CREATE_GUEST);
+    await ensureSignedIn();
     const { initialMs, incrementMs } = timeControl();
+    // Leave Black open: whoever opens the link claims the seat as themselves.
     const data = await gql(CREATE_GAME, {
-      in: { whiteId: white, blackId: black.id, initialMs, incrementMs },
+      in: { vsEngine: false, initialMs, incrementMs, rated: true },
     });
-    startGame(data.createGame, "w");
-    toast("Game created — share the link to play.");
+    startGame(data.createGame);
+    toast("Game created — send the link to your opponent.");
+  });
+
+  press($("join-game"), async () => {
+    await ensureSignedIn();
+    const data = await gql(JOIN, { id: state.game.id });
+    applyGame(data.joinGame);
+    toast("You are playing Black.");
   });
 
   press($("copy-link"), async () => {
@@ -731,9 +746,7 @@ function init() {
       );
       if (!ok) return;
     }
-    const data = await gql(RESIGN, {
-      in: { gameId: state.game.id, playerId: playerIdForSide(state.side) },
-    });
+    const data = await gql(RESIGN, { in: { gameId: state.game.id } });
     applyGame(data.resign);
   });
 
@@ -748,18 +761,11 @@ function init() {
     renderBoard();
   });
 
-  for (const btn of document.querySelectorAll(".segmented__btn")) {
-    btn.addEventListener("click", () => {
-      const side = btn.dataset.side;
-      setSide(side);
-      if (side !== "s") state.flipped = !settings.get("whiteOnBottom") && side === "b";
-      render();
-    });
-  }
-
   // Tick the clock display ~4x/second; authoritative values arrive on push.
   setInterval(() => { if (state.clock?.running) renderClocks(); }, 250);
 
+  // startGame writes location.hash itself, so guard against re-opening (and
+  // re-subscribing to) the game we just started.
   window.addEventListener("hashchange", () => {
     const id = location.hash.slice(1);
     if (id && id !== state.game?.id) openGame(id).catch(() => {});
@@ -778,6 +784,13 @@ function setSide(side) {
   state.side = side;
   state.selected = null;
   state.premove = null;
+}
+
+/** Recompute our seat and orientation from the session. */
+function syncSide() {
+  const side = sideFor(state.game, me);
+  setSide(side);
+  state.flipped = !settings.get("whiteOnBottom") && side === "b";
 }
 
 init();
