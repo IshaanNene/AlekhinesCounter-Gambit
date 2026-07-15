@@ -1,0 +1,64 @@
+# Local development stack.
+# `make up` builds and starts Postgres, the engine worker, the Erlang session
+# manager, and the game service. The game service applies embedded migrations on
+# startup.
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: acg
+      POSTGRES_PASSWORD: acg
+      POSTGRES_DB: acg
+    ports:
+      - "5433:5432" # host 5433 avoids clashing with a local Postgres on 5432
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U acg"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  engine-worker:
+    build:
+      context: .
+      dockerfile: services/engine-worker/Dockerfile
+    environment:
+      ACG_ENGINE_ADDR: ":50052"
+      ACG_STOCKFISH_PATH: "/usr/games/stockfish"
+    ports:
+      - "50052:50052"
+
+  # Erlang/OTP: one supervised actor per live game (clocks, presence, reconnects).
+  session-manager:
+    build:
+      context: .
+      dockerfile: services/session-manager/Dockerfile
+    environment:
+      ACG_SESSION_PORT: "50053"
+    ports:
+      - "50053:50053"
+
+  game-service:
+    build:
+      context: .
+      dockerfile: services/game-service/Dockerfile
+    environment:
+      ACG_GAME_ADDR: ":50051"
+      ACG_ENGINE_ADDR: "engine-worker:50052"
+      ACG_SESSION_ADDR: "session-manager:50053"
+      ACG_POSTGRES_DSN: "postgres://acg:acg@postgres:5432/acg?sslmode=disable"
+      ACG_RUN_MIGRATIONS: "true"
+    ports:
+      - "50051:50051"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      engine-worker:
+        condition: service_started
+      session-manager:
+        condition: service_started
+
+volumes:
+  pgdata:
