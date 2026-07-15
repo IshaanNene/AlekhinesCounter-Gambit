@@ -73,9 +73,11 @@ T1.1; supersedes the earlier per-service-module idea.)*
 - **Infra ports (local host):** Postgres `5433` (host) → `5432` (container; 5433 avoids a common local Postgres on 5432), Redis `6379`, Kafka `9092`, MinIO `9000`/console `9001`. In-container/compose network, Postgres is reached as `postgres:5432`.
 - **Proto packages:** `alekhine.game.v1`, `alekhine.engine.v1`, `alekhine.session.v1`. Go package option `github.com/IshaanNene/AlekhinesCounter-Gambit/proto/gen/go/<pkg>`.
 - **Config:** 12-factor. Read from env vars, prefix `ACG_` (e.g. `ACG_POSTGRES_DSN`). Provide sane localhost defaults.
-  Known vars: `ACG_POSTGRES_DSN`, `ACG_GAME_ADDR`, `ACG_ENGINE_ADDR`, `ACG_STOCKFISH_PATH`,
-  `ACG_RUN_MIGRATIONS`, `ACG_SESSION_ADDR` (game-service → session-manager; empty disables
-  live sessions), `ACG_SESSION_PORT` (session-manager's own gRPC listen port).
+  Known vars: `ACG_POSTGRES_DSN`, `ACG_GAME_ADDR` (game-service listen), `ACG_ENGINE_ADDR`,
+  `ACG_STOCKFISH_PATH`, `ACG_RUN_MIGRATIONS`, `ACG_SESSION_ADDR` (client → session-manager;
+  empty disables live sessions), `ACG_SESSION_PORT` (session-manager's own gRPC listen port),
+  `ACG_GATEWAY_ADDR` (gateway HTTP listen), `ACG_GAME_ADDR_CLIENT` (gateway → game-service),
+  `ACG_GRAPHQL_PLAYGROUND`.
 - **Logging:** structured JSON via `log/slog`. Every service logs a startup line with its version + listen addr.
 - **Errors:** wrap with `fmt.Errorf("...: %w", err)`. gRPC handlers return proper `status.Error` codes.
 - **Chess notation:** positions are FEN strings; moves are UCI long algebraic (e.g. `e2e4`, `e7e8q`).
@@ -296,7 +298,7 @@ outcomes — expand each into T-level subtasks when you start the epic.
 **Acceptance:** a move in game-service reflects in the session process state.
 **Commit:** `feat(session): grpc bridge between game-service and session-manager`
 
-### [ ] T2.5 — GraphQL gateway (schema, queries, mutations)
+### [x] T2.5 — GraphQL gateway (schema, queries, mutations)
 **Depends on:** T1.7
 **Files:** `services/gateway/` (gqlgen setup, resolvers, gRPC clients)
 **Context:** Public API on `:8080/graphql`. Queries (game, user, history), mutations (createGame, move, resign). Resolvers call internal gRPC.
@@ -437,6 +439,6 @@ observable in Grafana + Jaeger, load-tested with autoscaling — reproducible fr
 
 ## Progress tracker
 - Q1: ☑ T1.1 ☑ T1.2 ☑ T1.3 ☑ T1.4 ☑ T1.5 ☑ T1.6 ☑ T1.7 ☑ T1.8 ☑ T1.9
-- Q2: ☑ T2.1 ☑ T2.2 ☑ T2.3 ☑ T2.4 ☐ T2.5 ☐ T2.6 ☐ T2.7 ☐ T2.8
+- Q2: ☑ T2.1 ☑ T2.2 ☑ T2.3 ☑ T2.4 ☑ T2.5 ☐ T2.6 ☐ T2.7 ☐ T2.8
 - Q3: ☐ T3.1 ☐ T3.2 ☐ T3.3 ☐ T3.4 ☐ T3.5 ☐ T3.6
 - Q4: ☐ T4.1 ☐ T4.2 ☐ T4.3 ☐ T4.4 ☐ T4.5 ☐ T4.6 ☐ T4.7 ☐ T4.8 ☐ T4.9 ☐ T4.10

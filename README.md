@@ -62,7 +62,20 @@ manager is live and bridged to Go over gRPC:
   human-vs-human game, authorizes the side to move, reports each validated move
   (the session applies the clock + increment), and closes the session on
   checkmate/stalemate/draw so a decided game can never flag-fall.
-- `make up` now runs Postgres + engine-worker + session-manager + game-service.
+- `gateway` (Go + gqlgen) — public GraphQL API on `:8080/graphql` with a
+  playground at `/`. Holds no state: it translates GraphQL into internal gRPC.
+  `Game.clock` is a lazy field resolver, so the session-manager is only queried
+  when a client actually selects it (and is null for engine games).
+- `make up` now runs all five services: Postgres, engine-worker,
+  session-manager, game-service, gateway.
 
-Next in Q2: GraphQL gateway, WebSocket subscriptions, Redis fanout/cache,
-matchmaking. See [TASKS.md](TASKS.md).
+Play a whole game over GraphQL:
+
+```graphql
+mutation { createGame(input: { engineDepth: 10 }) { id fen } }
+mutation { move(input: { gameId: "<id>", uci: "e2e4" }) { fen moves { ply uci } } }
+query    { game(id: "<id>") { status endReason clock { whiteMs blackMs running } } }
+```
+
+Next in Q2: WebSocket subscriptions, Redis fanout/cache, matchmaking + auth.
+See [TASKS.md](TASKS.md).

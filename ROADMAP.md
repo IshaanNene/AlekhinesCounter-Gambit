@@ -133,10 +133,11 @@ boards in real time; a spectator can watch; disconnect/reconnect is handled.
 - [x] gRPC interface between Go game service and Erlang session manager
 
 ### Epic 2.2 — GraphQL API gateway (Go)
-- [ ] GraphQL schema: queries (game, user, history), mutations (move, resign)
-- [ ] GraphQL subscriptions for live game updates
-- [ ] Translate GraphQL ↔ internal gRPC calls
-- [ ] AuthN (JWT sessions) + basic authorization
+- [x] GraphQL schema: `game` query, `createGame`/`move`/`resign` mutations
+- [x] Translate GraphQL ↔ internal gRPC calls (game-service + session-manager)
+- [ ] `user` / game-history queries (deferred to Q3, alongside ratings & history)
+- [ ] GraphQL subscriptions for live game updates (T2.6)
+- [ ] AuthN (JWT sessions) + basic authorization (T2.8)
 
 ### Epic 2.3 — Real-time transport (WebSockets)
 - [ ] WebSocket endpoint for board/clock updates
