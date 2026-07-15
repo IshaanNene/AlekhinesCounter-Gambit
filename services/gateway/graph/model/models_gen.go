@@ -50,6 +50,12 @@ type Game struct {
 	Clock *Clock `json:"clock,omitempty"`
 }
 
+// An anonymous player identity, until real accounts land.
+type Guest struct {
+	ID       string `json:"id"`
+	Username string `json:"username"`
+}
+
 // A single half-move.
 type Move struct {
 	// Half-move number, starting at 1.

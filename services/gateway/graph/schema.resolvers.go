@@ -34,6 +34,15 @@ func (r *gameResolver) Clock(ctx context.Context, obj *model.Game) (*model.Clock
 	return toModelClock(snap), nil
 }
 
+// CreateGuest is the resolver for the createGuest field.
+func (r *mutationResolver) CreateGuest(ctx context.Context) (*model.Guest, error) {
+	resp, err := r.Upstream.Game.CreateGuest(ctx, &gamev1.CreateGuestRequest{})
+	if err != nil {
+		return nil, err
+	}
+	return &model.Guest{ID: resp.GetUserId(), Username: resp.GetUsername()}, nil
+}
+
 // CreateGame is the resolver for the createGame field.
 func (r *mutationResolver) CreateGame(ctx context.Context, input model.CreateGameInput) (*model.Game, error) {
 	resp, err := r.Upstream.Game.CreateGame(ctx, &gamev1.CreateGameRequest{

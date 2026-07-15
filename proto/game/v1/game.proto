@@ -15,6 +15,9 @@ service GameService {
   rpc GetGame(GetGameRequest) returns (GetGameResponse);
   // Resign ends a game in the opponent's favour.
   rpc Resign(ResignRequest) returns (ResignResponse);
+  // CreateGuest mints an anonymous user so a client can play before real
+  // accounts exist (auth arrives in T2.8).
+  rpc CreateGuest(CreateGuestRequest) returns (CreateGuestResponse);
 }
 
 // Status is the lifecycle state / result of a game.
@@ -109,4 +112,11 @@ message ResignRequest {
 
 message ResignResponse {
   Game game = 1;
+}
+
+message CreateGuestRequest {}
+
+message CreateGuestResponse {
+  string user_id = 1;
+  string username = 2;
 }

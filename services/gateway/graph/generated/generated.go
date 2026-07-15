@@ -60,6 +60,11 @@ type ComplexityRoot struct {
 		WhiteID   func(childComplexity int) int
 	}
 
+	Guest struct {
+		ID       func(childComplexity int) int
+		Username func(childComplexity int) int
+	}
+
 	Move struct {
 		FenAfter func(childComplexity int) int
 		Ply      func(childComplexity int) int
@@ -67,9 +72,10 @@ type ComplexityRoot struct {
 	}
 
 	Mutation struct {
-		CreateGame func(childComplexity int, input model.CreateGameInput) int
-		Move       func(childComplexity int, input model.MoveInput) int
-		Resign     func(childComplexity int, input model.ResignInput) int
+		CreateGame  func(childComplexity int, input model.CreateGameInput) int
+		CreateGuest func(childComplexity int) int
+		Move        func(childComplexity int, input model.MoveInput) int
+		Resign      func(childComplexity int, input model.ResignInput) int
 	}
 
 	Query struct {
@@ -90,6 +96,7 @@ type GameResolver interface {
 	Clock(ctx context.Context, obj *model.Game) (*model.Clock, error)
 }
 type MutationResolver interface {
+	CreateGuest(ctx context.Context) (*model.Guest, error)
 	CreateGame(ctx context.Context, input model.CreateGameInput) (*model.Game, error)
 	Move(ctx context.Context, input model.MoveInput) (*model.Game, error)
 	Resign(ctx context.Context, input model.ResignInput) (*model.Game, error)
@@ -212,6 +219,19 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.Game.WhiteID(childComplexity), true
 
+	case "Guest.id":
+		if e.ComplexityRoot.Guest.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Guest.ID(childComplexity), true
+	case "Guest.username":
+		if e.ComplexityRoot.Guest.Username == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Guest.Username(childComplexity), true
+
 	case "Move.fenAfter":
 		if e.ComplexityRoot.Move.FenAfter == nil {
 			break
@@ -242,6 +262,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.CreateGame(childComplexity, args["input"].(model.CreateGameInput)), true
+	case "Mutation.createGuest":
+		if e.ComplexityRoot.Mutation.CreateGuest == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Mutation.CreateGuest(childComplexity), true
 	case "Mutation.move":
 		if e.ComplexityRoot.Mutation.Move == nil {
 			break
@@ -504,7 +530,15 @@ input ResignInput {
   playerId: ID!
 }
 
+"An anonymous player identity, until real accounts land."
+type Guest {
+  id: ID!
+  username: String!
+}
+
 type Mutation {
+  "Mint an anonymous player identity so a client can start playing."
+  createGuest: Guest!
   createGame(input: CreateGameInput!): Game!
   "Submit a move. Errors if illegal or out of turn."
   move(input: MoveInput!): Game!
@@ -568,6 +602,16 @@ func (ec *executionContext) childFields_Game(ctx context.Context, field graphql.
 		return ec.fieldContext_Game_clock(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type Game", field.Name)
+}
+
+func (ec *executionContext) childFields_Guest(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "id":
+		return ec.fieldContext_Guest_id(ctx, field)
+	case "username":
+		return ec.fieldContext_Guest_username(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type Guest", field.Name)
 }
 
 func (ec *executionContext) childFields_Move(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
@@ -1205,6 +1249,52 @@ func (ec *executionContext) fieldContext_Game_clock(_ context.Context, field gra
 	return fc, nil
 }
 
+func (ec *executionContext) _Guest_id(ctx context.Context, field graphql.CollectedField, obj *model.Guest) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Guest_id(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNID2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Guest_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Guest", field, false, false, errors.New("field of type ID does not have child fields"))
+}
+
+func (ec *executionContext) _Guest_username(ctx context.Context, field graphql.CollectedField, obj *model.Guest) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Guest_username(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Username, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Guest_username(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Guest", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
 func (ec *executionContext) _Move_ply(ctx context.Context, field graphql.CollectedField, obj *model.Move) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -1272,6 +1362,38 @@ func (ec *executionContext) _Move_fenAfter(ctx context.Context, field graphql.Co
 }
 func (ec *executionContext) fieldContext_Move_fenAfter(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("Move", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _Mutation_createGuest(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_createGuest(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Mutation().CreateGuest(ctx)
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.Guest) graphql.Marshaler {
+			return ec.marshalNGuest2ᚖgithubᚗcomᚋIshaanNeneᚋAlekhinesCounterᚑGambitᚋservicesᚋgatewayᚋgraphᚋmodelᚐGuest(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_createGuest(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_Guest(ctx, field)
+		},
+	}
+	return fc, nil
 }
 
 func (ec *executionContext) _Mutation_createGame(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
@@ -2973,6 +3095,49 @@ func (ec *executionContext) _Game(ctx context.Context, sel ast.SelectionSet, obj
 	return out
 }
 
+var guestImplementors = []string{"Guest"}
+
+func (ec *executionContext) _Guest(ctx context.Context, sel ast.SelectionSet, obj *model.Guest) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, guestImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferredFieldSet := graphql.NewFieldSet(nil)
+	deferLabelToView := make(map[string]*graphql.FieldSetView)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("Guest")
+		case "id":
+			out.Values[i] = ec._Guest_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "username":
+			out.Values[i] = ec._Guest_username(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferLabelToView), math.MaxInt32)))
+
+	ec.ProcessDeferredGroup(graphql.DeferredGroup{
+		Defers:   deferLabelToView,
+		Path:     graphql.GetPath(ctx),
+		FieldSet: deferredFieldSet,
+		Context:  ctx,
+	})
+
+	return out
+}
+
 var moveImplementors = []string{"Move"}
 
 func (ec *executionContext) _Move(ctx context.Context, sel ast.SelectionSet, obj *model.Move) graphql.Marshaler {
@@ -3041,6 +3206,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		switch field.Name {
 		case "__typename":
 			out.Values[i] = graphql.MarshalString("Mutation")
+		case "createGuest":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_createGuest(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "createGame":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_createGame(ctx, field)
@@ -3637,6 +3809,20 @@ func (ec *executionContext) unmarshalNGameStatus2githubᚗcomᚋIshaanNeneᚋAle
 
 func (ec *executionContext) marshalNGameStatus2githubᚗcomᚋIshaanNeneᚋAlekhinesCounterᚑGambitᚋservicesᚋgatewayᚋgraphᚋmodelᚐGameStatus(ctx context.Context, sel ast.SelectionSet, v model.GameStatus) graphql.Marshaler {
 	return v
+}
+
+func (ec *executionContext) marshalNGuest2githubᚗcomᚋIshaanNeneᚋAlekhinesCounterᚑGambitᚋservicesᚋgatewayᚋgraphᚋmodelᚐGuest(ctx context.Context, sel ast.SelectionSet, v model.Guest) graphql.Marshaler {
+	return ec._Guest(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNGuest2ᚖgithubᚗcomᚋIshaanNeneᚋAlekhinesCounterᚑGambitᚋservicesᚋgatewayᚋgraphᚋmodelᚐGuest(ctx context.Context, sel ast.SelectionSet, v *model.Guest) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._Guest(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalNID2string(ctx context.Context, v any) (string, error) {

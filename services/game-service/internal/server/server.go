@@ -186,6 +186,16 @@ func (s *Server) playEngineReply(ctx context.Context, g *store.Game, after *ches
 	return nil
 }
 
+// CreateGuest mints an anonymous user. It exists so clients can obtain a player
+// identity before real accounts/auth land (T2.8).
+func (s *Server) CreateGuest(ctx context.Context, _ *gamev1.CreateGuestRequest) (*gamev1.CreateGuestResponse, error) {
+	id, err := s.store.CreateGuestUser(ctx)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "create guest: %v", err)
+	}
+	return &gamev1.CreateGuestResponse{UserId: id, Username: "guest-" + id}, nil
+}
+
 // Resign ends a game in the opponent's favour. Either participant may resign at
 // any point while the game is in progress; it is not turn-dependent.
 func (s *Server) Resign(ctx context.Context, req *gamev1.ResignRequest) (*gamev1.ResignResponse, error) {

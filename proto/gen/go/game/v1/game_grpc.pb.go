@@ -19,10 +19,11 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	GameService_CreateGame_FullMethodName = "/alekhine.game.v1.GameService/CreateGame"
-	GameService_SubmitMove_FullMethodName = "/alekhine.game.v1.GameService/SubmitMove"
-	GameService_GetGame_FullMethodName    = "/alekhine.game.v1.GameService/GetGame"
-	GameService_Resign_FullMethodName     = "/alekhine.game.v1.GameService/Resign"
+	GameService_CreateGame_FullMethodName  = "/alekhine.game.v1.GameService/CreateGame"
+	GameService_SubmitMove_FullMethodName  = "/alekhine.game.v1.GameService/SubmitMove"
+	GameService_GetGame_FullMethodName     = "/alekhine.game.v1.GameService/GetGame"
+	GameService_Resign_FullMethodName      = "/alekhine.game.v1.GameService/Resign"
+	GameService_CreateGuest_FullMethodName = "/alekhine.game.v1.GameService/CreateGuest"
 )
 
 // GameServiceClient is the client API for GameService service.
@@ -40,6 +41,9 @@ type GameServiceClient interface {
 	GetGame(ctx context.Context, in *GetGameRequest, opts ...grpc.CallOption) (*GetGameResponse, error)
 	// Resign ends a game in the opponent's favour.
 	Resign(ctx context.Context, in *ResignRequest, opts ...grpc.CallOption) (*ResignResponse, error)
+	// CreateGuest mints an anonymous user so a client can play before real
+	// accounts exist (auth arrives in T2.8).
+	CreateGuest(ctx context.Context, in *CreateGuestRequest, opts ...grpc.CallOption) (*CreateGuestResponse, error)
 }
 
 type gameServiceClient struct {
@@ -90,6 +94,16 @@ func (c *gameServiceClient) Resign(ctx context.Context, in *ResignRequest, opts 
 	return out, nil
 }
 
+func (c *gameServiceClient) CreateGuest(ctx context.Context, in *CreateGuestRequest, opts ...grpc.CallOption) (*CreateGuestResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreateGuestResponse)
+	err := c.cc.Invoke(ctx, GameService_CreateGuest_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // GameServiceServer is the server API for GameService service.
 // All implementations must embed UnimplementedGameServiceServer
 // for forward compatibility.
@@ -105,6 +119,9 @@ type GameServiceServer interface {
 	GetGame(context.Context, *GetGameRequest) (*GetGameResponse, error)
 	// Resign ends a game in the opponent's favour.
 	Resign(context.Context, *ResignRequest) (*ResignResponse, error)
+	// CreateGuest mints an anonymous user so a client can play before real
+	// accounts exist (auth arrives in T2.8).
+	CreateGuest(context.Context, *CreateGuestRequest) (*CreateGuestResponse, error)
 	mustEmbedUnimplementedGameServiceServer()
 }
 
@@ -126,6 +143,9 @@ func (UnimplementedGameServiceServer) GetGame(context.Context, *GetGameRequest) 
 }
 func (UnimplementedGameServiceServer) Resign(context.Context, *ResignRequest) (*ResignResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Resign not implemented")
+}
+func (UnimplementedGameServiceServer) CreateGuest(context.Context, *CreateGuestRequest) (*CreateGuestResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreateGuest not implemented")
 }
 func (UnimplementedGameServiceServer) mustEmbedUnimplementedGameServiceServer() {}
 func (UnimplementedGameServiceServer) testEmbeddedByValue()                     {}
@@ -220,6 +240,24 @@ func _GameService_Resign_Handler(srv interface{}, ctx context.Context, dec func(
 	return interceptor(ctx, in, info, handler)
 }
 
+func _GameService_CreateGuest_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateGuestRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GameServiceServer).CreateGuest(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: GameService_CreateGuest_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GameServiceServer).CreateGuest(ctx, req.(*CreateGuestRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // GameService_ServiceDesc is the grpc.ServiceDesc for GameService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -242,6 +280,10 @@ var GameService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Resign",
 			Handler:    _GameService_Resign_Handler,
+		},
+		{
+			MethodName: "CreateGuest",
+			Handler:    _GameService_CreateGuest_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

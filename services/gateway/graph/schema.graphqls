@@ -104,7 +104,15 @@ input ResignInput {
   playerId: ID!
 }
 
+"An anonymous player identity, until real accounts land."
+type Guest {
+  id: ID!
+  username: String!
+}
+
 type Mutation {
+  "Mint an anonymous player identity so a client can start playing."
+  createGuest: Guest!
   createGame(input: CreateGameInput!): Game!
   "Submit a move. Errors if illegal or out of turn."
   move(input: MoveInput!): Game!
