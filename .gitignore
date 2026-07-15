@@ -1,0 +1,39 @@
+# Go
+/bin/
+*.exe
+*.test
+*.out
+coverage.*
+vendor/
+# stray service binaries if built without -o bin/
+/engine-worker
+/game-service
+/gateway
+/play
+
+# Erlang / rebar3
+_build/
+*.beam
+rebar.lock
+erl_crash.dump
+
+# Node (frontend / tooling, later phases)
+node_modules/
+dist/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Local data
+/data/
+/tmp/

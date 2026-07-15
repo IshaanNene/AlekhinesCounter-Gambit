@@ -1,0 +1,34 @@
+# Keep build contexts small and hermetic. Critically, never ship host-built
+# artifacts into an image: Erlang _build is compiled for the host OS/OTP version
+# and breaks the container build.
+# Note the **/ prefix: a bare "_build/" would only match at the context root and
+# would miss services/session-manager/_build.
+**/_build/
+**/rebar.lock
+/bin/
+.git/
+.github/
+node_modules/
+dist/
+
+# Host-only tooling and docs
+.claude/
+docs/
+load/
+infra/
+*.md
+.DS_Store
+.editorconfig
+.golangci.yml
+
+# Local env / secrets
+.env
+.env.*
+*.pem
+*.key
+
+# Test/coverage artifacts
+*.test
+*.out
+coverage.*
+erl_crash.dump
