@@ -97,8 +97,8 @@ func (w *Worker) Analyze(ctx context.Context, req *analysisv1.AnalysisRequested)
 		}
 		whiteToMove := board.Turn == chess.White
 
-		loss := analysis.CentipawnLoss(before, after)
 		matched := before.BestMove == uci
+		loss := analysis.LossForMove(before, after, matched)
 		reports = append(reports, analysis.MoveReport{
 			Ply:           i + 1,
 			UCI:           uci,
@@ -106,7 +106,7 @@ func (w *Worker) Analyze(ctx context.Context, req *analysisv1.AnalysisRequested)
 			EvalBeforeCP:  before.Normalized(),
 			EvalAfterCP:   after.Normalized(),
 			CentipawnLoss: loss,
-			Accuracy:      analysis.AccuracyFor(before, after),
+			Accuracy:      analysis.AccuracyForMove(before, after, matched),
 			Quality:       analysis.Classify(loss, matched, false),
 			MatchedEngine: matched,
 			MateBefore:    before.Mate,

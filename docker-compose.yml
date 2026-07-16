@@ -100,6 +100,8 @@ services:
       ACG_SESSION_ADDR: "session-manager:50053"
       ACG_POSTGRES_DSN: "postgres://acg:acg@postgres:5432/acg?sslmode=disable"
       ACG_REDIS_ADDR: "redis:6379"
+      ACG_KAFKA_BROKERS: "kafka:9092"
+      ACG_ANALYSIS_DEPTH: "12"
       ACG_RUN_MIGRATIONS: "true"
     ports:
       - "50051:50051"
@@ -108,9 +110,34 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      kafka:
+        condition: service_healthy
       engine-worker:
         condition: service_started
       session-manager:
+        condition: service_started
+
+  # Consumes analysis requests from Kafka. Stateless and scalable: `docker compose
+  # up --scale analysis-worker=3` divides the partitions between three members of
+  # the consumer group, with no change anywhere else.
+  analysis-worker:
+    build:
+      context: .
+      dockerfile: services/analysis-worker/Dockerfile
+    environment:
+      ACG_KAFKA_BROKERS: "kafka:9092"
+      ACG_POSTGRES_DSN: "postgres://acg:acg@postgres:5432/acg?sslmode=disable"
+      ACG_ENGINE_ADDR: "engine-worker:50052"
+      ACG_REDIS_ADDR: "redis:6379"
+      ACG_ANALYSIS_DEPTH: "12"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      engine-worker:
         condition: service_started
 
   # Public API: GraphQL over HTTP. Translates to internal gRPC; holds no state.
