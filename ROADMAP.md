@@ -180,10 +180,12 @@ downloadable; opening book influences engine play.
 - [ ] Schema registry / protobuf serialization on the wire
 
 ### Epic 3.2 — Analysis pipeline
-- [ ] On game end, enqueue full-game analysis request
-- [ ] Workers analyze each position, emit eval + best line
-- [ ] Store per-move analysis; compute blunders/mistakes/accuracy
-- [ ] Eval-graph data exposed via GraphQL
+- [x] On game end, enqueue full-game analysis request
+- [x] Workers analyze each position, emit eval + best line
+- [x] Store per-move analysis; compute blunders/mistakes/accuracy
+- [x] Eval-graph data exposed via GraphQL (+ rendered in the web client)
+- [x] Theoretical novelty detection (RedisBloom)
+- [x] Fair-play signals for human review (RedisTimeSeries) — see ADR-0003
 
 ### Epic 3.3 — MinIO object storage
 - [ ] Store PGN archives (S3-compatible)

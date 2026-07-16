@@ -9,6 +9,9 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/pressly/goose/v3 v3.27.2
+	github.com/redis/go-redis/v9 v9.21.0
+	github.com/twmb/franz-go v1.21.5
+	github.com/twmb/franz-go/pkg/kadm v1.18.0
 	github.com/vektah/gqlparser/v2 v2.5.36
 	golang.org/x/crypto v0.54.0
 	google.golang.org/grpc v1.82.0
@@ -27,11 +30,8 @@ require (
 	github.com/klauspost/compress v1.18.6 // indirect
 	github.com/mfridman/interpolate v0.0.2 // indirect
 	github.com/pierrec/lz4/v4 v4.1.26 // indirect
-	github.com/redis/go-redis/v9 v9.21.0 // indirect
 	github.com/sethvargo/go-retry v0.3.0 // indirect
 	github.com/sosodev/duration v1.4.0 // indirect
-	github.com/twmb/franz-go v1.21.5 // indirect
-	github.com/twmb/franz-go/pkg/kadm v1.18.0 // indirect
 	github.com/twmb/franz-go/pkg/kmsg v1.13.1 // indirect
 	github.com/urfave/cli/v3 v3.10.1 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
