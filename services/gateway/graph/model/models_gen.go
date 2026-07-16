@@ -158,6 +158,23 @@ type Mutation struct {
 type Query struct {
 }
 
+type QueueInput struct {
+	// Time control in milliseconds. Players are only paired within the same one.
+	InitialMs   int  `json:"initialMs"`
+	IncrementMs *int `json:"incrementMs,omitempty"`
+}
+
+// The result of joining the matchmaking queue: either you were paired immediately
+// with someone already waiting, or you are now waiting yourself and will be told
+// via the `matchFound` subscription.
+type QueueTicket struct {
+	Matched bool `json:"matched"`
+	// The game you were paired into. Null while you are still waiting.
+	Game *Game `json:"game,omitempty"`
+	// How many players are waiting on this time control, including you.
+	QueueDepth int `json:"queueDepth"`
+}
+
 type RegisterInput struct {
 	Username string `json:"username"`
 	Password string `json:"password"`

@@ -3,6 +3,7 @@ package graph
 import (
 	"log/slog"
 
+	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/redisx"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/services/gateway/internal/auth"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/services/gateway/internal/pubsub"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/services/gateway/internal/upstream"
@@ -17,5 +18,7 @@ type Resolver struct {
 	Upstream *upstream.Clients
 	Bus      pubsub.Bus
 	Signer   *auth.Signer
-	Log      *slog.Logger
+	// Matchmaking pairs waiting players. May be disabled when Redis is absent.
+	Matchmaking *redisx.Matchmaking
+	Log         *slog.Logger
 }

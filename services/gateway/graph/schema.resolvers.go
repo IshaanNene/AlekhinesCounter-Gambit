@@ -194,6 +194,16 @@ func (r *mutationResolver) JoinGame(ctx context.Context, gameID string) (*model.
 	return g, nil
 }
 
+// EnterQueue is the resolver for the enterQueue field.
+func (r *mutationResolver) EnterQueue(ctx context.Context, input model.QueueInput) (*model.QueueTicket, error) {
+	return r.enterQueue(ctx, input)
+}
+
+// LeaveQueue is the resolver for the leaveQueue field.
+func (r *mutationResolver) LeaveQueue(ctx context.Context, input model.QueueInput) (bool, error) {
+	return r.leaveQueue(ctx, input)
+}
+
 // Me is the resolver for the me field.
 func (r *queryResolver) Me(ctx context.Context) (*model.User, error) {
 	id, err := auth.FromContext(ctx)
@@ -357,6 +367,11 @@ func (r *subscriptionResolver) GameUpdated(ctx context.Context, gameID string) (
 		}
 	}()
 	return out, nil
+}
+
+// MatchFound is the resolver for the matchFound field.
+func (r *subscriptionResolver) MatchFound(ctx context.Context) (<-chan *model.Game, error) {
+	return r.matchFound(ctx)
 }
 
 // Game returns generated.GameResolver implementation.

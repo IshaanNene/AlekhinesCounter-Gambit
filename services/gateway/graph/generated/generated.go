@@ -127,7 +127,9 @@ type ComplexityRoot struct {
 
 	Mutation struct {
 		CreateGame        func(childComplexity int, input model.CreateGameInput) int
+		EnterQueue        func(childComplexity int, input model.QueueInput) int
 		JoinGame          func(childComplexity int, gameID string) int
+		LeaveQueue        func(childComplexity int, input model.QueueInput) int
 		Login             func(childComplexity int, input model.LoginInput) int
 		LoginAsGuest      func(childComplexity int) int
 		Logout            func(childComplexity int) int
@@ -149,6 +151,12 @@ type ComplexityRoot struct {
 		User         func(childComplexity int, id string) int
 	}
 
+	QueueTicket struct {
+		Game       func(childComplexity int) int
+		Matched    func(childComplexity int) int
+		QueueDepth func(childComplexity int) int
+	}
+
 	Session struct {
 		ExpiresAt func(childComplexity int) int
 		Token     func(childComplexity int) int
@@ -166,6 +174,7 @@ type ComplexityRoot struct {
 
 	Subscription struct {
 		GameUpdated func(childComplexity int, gameID string) int
+		MatchFound  func(childComplexity int) int
 	}
 
 	User struct {
@@ -197,6 +206,8 @@ type MutationResolver interface {
 	Move(ctx context.Context, input model.MoveInput) (*model.Game, error)
 	Resign(ctx context.Context, input model.ResignInput) (*model.Game, error)
 	JoinGame(ctx context.Context, gameID string) (*model.Game, error)
+	EnterQueue(ctx context.Context, input model.QueueInput) (*model.QueueTicket, error)
+	LeaveQueue(ctx context.Context, input model.QueueInput) (bool, error)
 }
 type QueryResolver interface {
 	Me(ctx context.Context) (*model.User, error)
@@ -210,6 +221,7 @@ type QueryResolver interface {
 }
 type SubscriptionResolver interface {
 	GameUpdated(ctx context.Context, gameID string) (<-chan *model.Game, error)
+	MatchFound(ctx context.Context) (<-chan *model.Game, error)
 }
 
 // endregion ************************** generated!.gotpl **************************
@@ -604,6 +616,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.CreateGame(childComplexity, args["input"].(model.CreateGameInput)), true
+	case "Mutation.enterQueue":
+		if e.ComplexityRoot.Mutation.EnterQueue == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_enterQueue_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.EnterQueue(childComplexity, args["input"].(model.QueueInput)), true
 	case "Mutation.joinGame":
 		if e.ComplexityRoot.Mutation.JoinGame == nil {
 			break
@@ -615,6 +638,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.JoinGame(childComplexity, args["gameId"].(string)), true
+	case "Mutation.leaveQueue":
+		if e.ComplexityRoot.Mutation.LeaveQueue == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_leaveQueue_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.LeaveQueue(childComplexity, args["input"].(model.QueueInput)), true
 	case "Mutation.login":
 		if e.ComplexityRoot.Mutation.Login == nil {
 			break
@@ -774,6 +808,25 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.Query.User(childComplexity, args["id"].(string)), true
 
+	case "QueueTicket.game":
+		if e.ComplexityRoot.QueueTicket.Game == nil {
+			break
+		}
+
+		return e.ComplexityRoot.QueueTicket.Game(childComplexity), true
+	case "QueueTicket.matched":
+		if e.ComplexityRoot.QueueTicket.Matched == nil {
+			break
+		}
+
+		return e.ComplexityRoot.QueueTicket.Matched(childComplexity), true
+	case "QueueTicket.queueDepth":
+		if e.ComplexityRoot.QueueTicket.QueueDepth == nil {
+			break
+		}
+
+		return e.ComplexityRoot.QueueTicket.QueueDepth(childComplexity), true
+
 	case "Session.expiresAt":
 		if e.ComplexityRoot.Session.ExpiresAt == nil {
 			break
@@ -841,6 +894,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Subscription.GameUpdated(childComplexity, args["gameId"].(string)), true
+	case "Subscription.matchFound":
+		if e.ComplexityRoot.Subscription.MatchFound == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Subscription.MatchFound(childComplexity), true
 
 	case "User.createdAt":
 		if e.ComplexityRoot.User.CreatedAt == nil {
@@ -896,6 +955,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputCreateGameInput,
 		ec.unmarshalInputLoginInput,
 		ec.unmarshalInputMoveInput,
+		ec.unmarshalInputQueueInput,
 		ec.unmarshalInputRegisterInput,
 		ec.unmarshalInputResignInput,
 	)
@@ -1145,6 +1205,25 @@ type Query {
   health: String!
 }
 
+"""
+The result of joining the matchmaking queue: either you were paired immediately
+with someone already waiting, or you are now waiting yourself and will be told
+via the ` + "`" + `matchFound` + "`" + ` subscription.
+"""
+type QueueTicket {
+  matched: Boolean!
+  "The game you were paired into. Null while you are still waiting."
+  game: Game
+  "How many players are waiting on this time control, including you."
+  queueDepth: Int!
+}
+
+input QueueInput {
+  "Time control in milliseconds. Players are only paired within the same one."
+  initialMs: Int!
+  incrementMs: Int
+}
+
 input CreateGameInput {
   "Play Stockfish. When false the game waits for an opponent to join."
   vsEngine: Boolean
@@ -1277,6 +1356,13 @@ type Mutation {
   resign(input: ResignInput!): Game!
   "Claim the open Black seat of a game that is waiting for an opponent."
   joinGame(gameId: ID!): Game!
+  """
+  Join the matchmaking queue. Pairs you with the nearest-rated player already
+  waiting on the same time control, or enqueues you if there is nobody suitable.
+  """
+  enterQueue(input: QueueInput!): QueueTicket!
+  "Leave the queue."
+  leaveQueue(input: QueueInput!): Boolean!
 }
 
 type Subscription {
@@ -1286,6 +1372,12 @@ type Subscription {
   or spectator) can render a live board without polling.
   """
   gameUpdated(gameId: ID!): Game!
+  """
+  Emits the game you were paired into, once an opponent arrives.
+  The player who joins second creates the game, so the one already waiting has
+  no response to learn about it on — this is how they find out.
+  """
+  matchFound: Game!
 }
 `, BuiltIn: false},
 }
@@ -1465,6 +1557,18 @@ func (ec *executionContext) childFields_MoveVerdict(ctx context.Context, field g
 		return ec.fieldContext_MoveVerdict_matchedEngine(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type MoveVerdict", field.Name)
+}
+
+func (ec *executionContext) childFields_QueueTicket(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "matched":
+		return ec.fieldContext_QueueTicket_matched(ctx, field)
+	case "game":
+		return ec.fieldContext_QueueTicket_game(ctx, field)
+	case "queueDepth":
+		return ec.fieldContext_QueueTicket_queueDepth(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type QueueTicket", field.Name)
 }
 
 func (ec *executionContext) childFields_Session(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
@@ -1647,6 +1751,20 @@ func (ec *executionContext) field_Mutation_createGame_args(ctx context.Context, 
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_enterQueue_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input",
+		func(ctx context.Context, v any) (model.QueueInput, error) {
+			return ec.unmarshalNQueueInput2githubᚗcomᚋIshaanNeneᚋAlekhinesCounterᚑGambitᚋservicesᚋgatewayᚋgraphᚋmodelᚐQueueInput(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_joinGame_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -1658,6 +1776,20 @@ func (ec *executionContext) field_Mutation_joinGame_args(ctx context.Context, ra
 		return nil, err
 	}
 	args["gameId"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_leaveQueue_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input",
+		func(ctx context.Context, v any) (model.QueueInput, error) {
+			return ec.unmarshalNQueueInput2githubᚗcomᚋIshaanNeneᚋAlekhinesCounterᚑGambitᚋservicesᚋgatewayᚋgraphᚋmodelᚐQueueInput(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
 	return args, nil
 }
 
@@ -3751,6 +3883,94 @@ func (ec *executionContext) fieldContext_Mutation_joinGame(ctx context.Context, 
 	return fc, nil
 }
 
+func (ec *executionContext) _Mutation_enterQueue(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_enterQueue(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().EnterQueue(ctx, fc.Args["input"].(model.QueueInput))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.QueueTicket) graphql.Marshaler {
+			return ec.marshalNQueueTicket2ᚖgithubᚗcomᚋIshaanNeneᚋAlekhinesCounterᚑGambitᚋservicesᚋgatewayᚋgraphᚋmodelᚐQueueTicket(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_enterQueue(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_QueueTicket(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_enterQueue_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_leaveQueue(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_leaveQueue(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().LeaveQueue(ctx, fc.Args["input"].(model.QueueInput))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_leaveQueue(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_leaveQueue_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Query_me(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -4146,6 +4366,84 @@ func (ec *executionContext) fieldContext_Query___schema(_ context.Context, field
 	return fc, nil
 }
 
+func (ec *executionContext) _QueueTicket_matched(ctx context.Context, field graphql.CollectedField, obj *model.QueueTicket) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_QueueTicket_matched(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Matched, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_QueueTicket_matched(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("QueueTicket", field, false, false, errors.New("field of type Boolean does not have child fields"))
+}
+
+func (ec *executionContext) _QueueTicket_game(ctx context.Context, field graphql.CollectedField, obj *model.QueueTicket) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_QueueTicket_game(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Game, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.Game) graphql.Marshaler {
+			return ec.marshalOGame2ᚖgithubᚗcomᚋIshaanNeneᚋAlekhinesCounterᚑGambitᚋservicesᚋgatewayᚋgraphᚋmodelᚐGame(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_QueueTicket_game(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "QueueTicket",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_Game(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _QueueTicket_queueDepth(ctx context.Context, field graphql.CollectedField, obj *model.QueueTicket) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_QueueTicket_queueDepth(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.QueueDepth, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v int) graphql.Marshaler {
+			return ec.marshalNInt2int(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_QueueTicket_queueDepth(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("QueueTicket", field, false, false, errors.New("field of type Int does not have child fields"))
+}
+
 func (ec *executionContext) _Session_user(ctx context.Context, field graphql.CollectedField, obj *model.Session) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -4402,6 +4700,38 @@ func (ec *executionContext) fieldContext_Subscription_gameUpdated(ctx context.Co
 	if fc.Args, err = ec.field_Subscription_gameUpdated_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Subscription_matchFound(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
+	return graphql.ResolveFieldStream(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Subscription_matchFound(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Subscription().MatchFound(ctx)
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.Game) graphql.Marshaler {
+			return ec.marshalNGame2ᚖgithubᚗcomᚋIshaanNeneᚋAlekhinesCounterᚑGambitᚋservicesᚋgatewayᚋgraphᚋmodelᚐGame(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Subscription_matchFound(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Subscription",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_Game(ctx, field)
+		},
 	}
 	return fc, nil
 }
@@ -5765,6 +6095,43 @@ func (ec *executionContext) unmarshalInputMoveInput(ctx context.Context, obj any
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputQueueInput(ctx context.Context, obj any) (model.QueueInput, error) {
+	var it model.QueueInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"initialMs", "incrementMs"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "initialMs":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("initialMs"))
+			data, err := ec.unmarshalNInt2int(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.InitialMs = data
+		case "incrementMs":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("incrementMs"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.IncrementMs = data
+		}
+	}
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputRegisterInput(ctx context.Context, obj any) (model.RegisterInput, error) {
 	var it model.RegisterInput
 	if obj == nil {
@@ -6569,6 +6936,20 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "enterQueue":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_enterQueue(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "leaveQueue":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_leaveQueue(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -6821,6 +7202,54 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 	return out
 }
 
+var queueTicketImplementors = []string{"QueueTicket"}
+
+func (ec *executionContext) _QueueTicket(ctx context.Context, sel ast.SelectionSet, obj *model.QueueTicket) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, queueTicketImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferredFieldSet := graphql.NewFieldSet(nil)
+	deferLabelToView := make(map[string]*graphql.FieldSetView)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("QueueTicket")
+		case "matched":
+			out.Values[i] = ec._QueueTicket_matched(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "game":
+			out.Values[i] = ec._QueueTicket_game(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "queueDepth":
+			out.Values[i] = ec._QueueTicket_queueDepth(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferLabelToView), math.MaxInt32)))
+
+	ec.ProcessDeferredGroup(graphql.DeferredGroup{
+		Defers:   deferLabelToView,
+		Path:     graphql.GetPath(ctx),
+		FieldSet: deferredFieldSet,
+		Context:  ctx,
+	})
+
+	return out
+}
+
 var sessionImplementors = []string{"Session"}
 
 func (ec *executionContext) _Session(ctx context.Context, sel ast.SelectionSet, obj *model.Session) graphql.Marshaler {
@@ -6947,6 +7376,8 @@ func (ec *executionContext) _Subscription(ctx context.Context, sel ast.Selection
 	switch fields[0].Name {
 	case "gameUpdated":
 		return ec._Subscription_gameUpdated(ctx, fields[0])
+	case "matchFound":
+		return ec._Subscription_matchFound(ctx, fields[0])
 	default:
 		panic("unknown field " + strconv.Quote(fields[0].Name))
 	}
@@ -7645,6 +8076,25 @@ func (ec *executionContext) marshalNMoveVerdict2ᚖgithubᚗcomᚋIshaanNeneᚋA
 		return graphql.Null
 	}
 	return ec._MoveVerdict(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNQueueInput2githubᚗcomᚋIshaanNeneᚋAlekhinesCounterᚑGambitᚋservicesᚋgatewayᚋgraphᚋmodelᚐQueueInput(ctx context.Context, v any) (model.QueueInput, error) {
+	res, err := ec.unmarshalInputQueueInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNQueueTicket2githubᚗcomᚋIshaanNeneᚋAlekhinesCounterᚑGambitᚋservicesᚋgatewayᚋgraphᚋmodelᚐQueueTicket(ctx context.Context, sel ast.SelectionSet, v model.QueueTicket) graphql.Marshaler {
+	return ec._QueueTicket(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNQueueTicket2ᚖgithubᚗcomᚋIshaanNeneᚋAlekhinesCounterᚑGambitᚋservicesᚋgatewayᚋgraphᚋmodelᚐQueueTicket(ctx context.Context, sel ast.SelectionSet, v *model.QueueTicket) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._QueueTicket(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalNRegisterInput2githubᚗcomᚋIshaanNeneᚋAlekhinesCounterᚑGambitᚋservicesᚋgatewayᚋgraphᚋmodelᚐRegisterInput(ctx context.Context, v any) (model.RegisterInput, error) {

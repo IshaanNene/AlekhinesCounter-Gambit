@@ -90,8 +90,12 @@ func main() {
 	limiter := redisx.NewLimiter(rdb, 20, 60)
 
 	srv := newGraphQLServer(&graph.Resolver{
-		Upstream: clients, Bus: bus, Signer: signer, Log: log,
-	})
+		Upstream:    clients,
+		Bus:         bus,
+		Signer:      signer,
+		Matchmaking: redisx.NewMatchmaking(rdb),
+		Log:         log,
+	}, signer)
 
 	// Order matters: auth runs first so the limiter can key on the user id and
 	// only fall back to IP for anonymous callers.
@@ -148,7 +152,7 @@ func fanoutKind(rdb *redis.Client) string {
 }
 
 // newGraphQLServer builds the gqlgen handler with the transports we support.
-func newGraphQLServer(resolver *graph.Resolver) *handler.Server {
+func newGraphQLServer(resolver *graph.Resolver, signer *auth.Signer) *handler.Server {
 	srv := handler.New(generated.NewExecutableSchema(generated.Config{Resolvers: resolver}))
 	srv.AddTransport(transport.Options{})
 	srv.AddTransport(transport.GET{})
@@ -162,6 +166,12 @@ func newGraphQLServer(resolver *graph.Resolver) *handler.Server {
 			},
 		},
 		KeepAlivePingInterval: 10 * time.Second,
+		// Authenticate the socket itself. The browser's cookie rides the upgrade
+		// request and the HTTP middleware already handled it; this covers every
+		// other client, which cannot set a cookie on a WebSocket handshake.
+		InitFunc: func(ctx context.Context, initPayload transport.InitPayload) (context.Context, *transport.InitPayload, error) {
+			return signer.VerifyInitPayload(ctx, initPayload), nil, nil
+		},
 	})
 	srv.SetQueryCache(lru.New[*ast.QueryDocument](1000))
 	srv.Use(extension.Introspection{})

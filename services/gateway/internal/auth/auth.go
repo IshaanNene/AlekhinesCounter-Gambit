@@ -173,6 +173,38 @@ func tokenFrom(r *http.Request) string {
 	return ""
 }
 
+// WithIdentity attaches an identity to a context.
+//
+// Used by the WebSocket connection_init path, which authenticates outside the
+// HTTP middleware: a browser sends the session cookie on a same-origin upgrade
+// automatically, but any other client (a load test, a bot, a native app) has no
+// way to attach one and must pass the token in the init payload instead.
+func WithIdentity(ctx context.Context, id *Identity) context.Context {
+	return context.WithValue(ctx, identityKey, id)
+}
+
+// VerifyInitPayload authenticates a graphql-transport-ws connection_init.
+//
+// It reads an "Authorization: Bearer <token>" entry from the payload. An absent
+// or bad token is not an error: the connection proceeds anonymously (the cookie
+// may already have identified it), and subscriptions that need a user reject it
+// themselves.
+func (s *Signer) VerifyInitPayload(ctx context.Context, payload map[string]any) context.Context {
+	raw, _ := payload["Authorization"].(string)
+	if raw == "" {
+		raw, _ = payload["authorization"].(string)
+	}
+	token := strings.TrimPrefix(raw, "Bearer ")
+	if token == "" || token == raw && !strings.HasPrefix(raw, "Bearer ") {
+		return ctx
+	}
+	id, err := s.Verify(token)
+	if err != nil {
+		return ctx
+	}
+	return WithIdentity(ctx, id)
+}
+
 // FromContext returns the authenticated identity, or ErrNoIdentity.
 func FromContext(ctx context.Context) (*Identity, error) {
 	id, ok := ctx.Value(identityKey).(*Identity)
