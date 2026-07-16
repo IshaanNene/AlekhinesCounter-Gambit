@@ -106,6 +106,19 @@ logs: ## Tail stack logs
 run-game: ## Play a game vs the engine via the CLI shim
 	go run ./cmd/play
 
+##@ Load testing
+
+.PHONY: load
+load: ## Run the load-test suite (autocannon + k6); needs `make up` running
+	@command -v k6 >/dev/null 2>&1 || { echo "k6 not installed: brew install k6"; exit 1; }
+	cd load && npm install --silent
+	@echo "\n>> GraphQL read throughput (autocannon)"
+	cd load && DURATION=10 CONNECTIONS=60 node autocannon/graphql.js
+	@echo "\n>> Full game flow (k6)"
+	k6 run -e VUS=15 -e DURATION=20s --no-usage-report load/k6/game_flow.js
+	@echo "\n>> WebSocket spectators (k6)"
+	k6 run -e VUS=150 -e DURATION=20s --no-usage-report load/k6/spectate.js
+
 ##@ Housekeeping
 
 .PHONY: clean

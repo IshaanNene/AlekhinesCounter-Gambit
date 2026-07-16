@@ -1,0 +1,13 @@
+{
+  "name": "acg-load",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Load tests for Alekhine's Counter-Gambit (autocannon + k6)",
+  "scripts": {
+    "graphql": "node autocannon/graphql.js"
+  },
+  "dependencies": {
+    "autocannon": "^7.15.0"
+  }
+}

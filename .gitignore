@@ -37,3 +37,7 @@ dist/
 # Local data
 /data/
 /tmp/
+
+# Load-test deps
+load/node_modules/
+load/package-lock.json
