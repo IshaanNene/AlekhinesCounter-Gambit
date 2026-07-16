@@ -173,7 +173,7 @@ users get move-by-move eval graphs; PGNs and analyses are archived and
 downloadable; opening book influences engine play.
 
 ### Epic 3.1 — Kafka event backbone
-- [ ] Topics: `moves`, `game-events`, `analysis-requests`, `analysis-results`
+- [x] Topics: `game-finished`, `analysis-requested`, `analysis-completed`
 - [ ] Game service produces move/game events to Kafka
 - [ ] Engine workers consume `analysis-requests` (pull-based work queue)
 - [ ] Consumer groups for horizontal scaling of workers
