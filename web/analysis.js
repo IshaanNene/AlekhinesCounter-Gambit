@@ -31,12 +31,19 @@ export const QUALITY_ICON = {
 };
 
 let pollTimer = null;
-/** The report for the game on screen, or null. Read by the move list. */
-export let current = null;
+
+// The report for the game on screen, held in a mutable object rather than a
+// re-assigned `export let`. Exported bindings are live in the spec, but relying
+// on that couples every reader to the exporter's assignment timing; a plain
+// object has one identity and no such subtlety.
+const held = { report: null };
+
+/** The report for the game on screen, or null. */
+export const current = () => held.report;
 
 /** Verdict for a given ply, when a report exists. */
 export function verdictFor(ply) {
-  return current?.moves?.find((m) => m.ply === ply) ?? null;
+  return held.report?.moves?.find((m) => m.ply === ply) ?? null;
 }
 
 /**
@@ -47,15 +54,21 @@ export function watchAnalysis(game, { onReport } = {}) {
   clearTimeout(pollTimer);
 
   if (!game || game.status === "IN_PROGRESS") {
-    current = null;
+    held.report = null;
     $("analysis-block").hidden = true;
     return;
   }
 
-  $("analysis-block").hidden = false;
-  if (!current || current.gameId !== game.id) {
-    renderPending("Analysing the game…");
+  // Already have this game's report: leave it on screen. applyGame runs again on
+  // every subscription push, and re-fetching would blank the panel each time.
+  if (held.report?.gameId === game.id) {
+    $("analysis-block").hidden = false;
+    return;
   }
+
+  held.report = null;
+  $("analysis-block").hidden = false;
+  renderPending("Analysing the game…");
 
   let attempts = 0;
   const poll = async () => {
@@ -69,9 +82,9 @@ export function watchAnalysis(game, { onReport } = {}) {
     }
     const report = data.gameAnalysis;
     if (report) {
-      current = { ...report, gameId: game.id };
+      held.report = { ...report, gameId: game.id };
       render(report);
-      onReport?.(current);
+      onReport?.(held.report);
       return;
     }
     // A long game is many engine evaluations; give it a while before giving up.
