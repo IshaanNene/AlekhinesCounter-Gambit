@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -18,13 +19,14 @@ import (
 	"google.golang.org/grpc/reflection"
 
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/config"
+	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/engine"
+	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/kafkax"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/redisx"
+	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/store"
 	authv1 "github.com/IshaanNene/AlekhinesCounter-Gambit/proto/gen/go/auth/v1"
 	gamev1 "github.com/IshaanNene/AlekhinesCounter-Gambit/proto/gen/go/game/v1"
-	"github.com/IshaanNene/AlekhinesCounter-Gambit/services/game-service/internal/engine"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/services/game-service/internal/server"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/services/game-service/internal/session"
-	"github.com/IshaanNene/AlekhinesCounter-Gambit/services/game-service/internal/store"
 )
 
 var version = "dev"
@@ -52,6 +54,9 @@ func main() {
 	engineAddr := config.Getenv("ACG_ENGINE_ADDR", "localhost:50052")
 	// Empty disables the evaluation cache; the engine is then asked every time.
 	redisAddr := config.Getenv("ACG_REDIS_ADDR", "")
+	// Empty disables background analysis; games are still played and stored.
+	kafkaBrokers := config.Getenv("ACG_KAFKA_BROKERS", "")
+	analysisDepth, _ := strconv.Atoi(config.Getenv("ACG_ANALYSIS_DEPTH", "14"))
 	// Empty disables live sessions (engine-only games still work).
 	sessionAddr := config.Getenv("ACG_SESSION_ADDR", "")
 
@@ -107,6 +112,18 @@ func main() {
 	}
 	defer sess.Close()
 
+	// Declaring the topics here rather than relying on auto-creation: the default
+	// is a single partition, which would cap the worker pool at one consumer.
+	if err := kafkax.EnsureTopics(ctx, kafkaBrokers, log); err != nil {
+		log.Warn("could not ensure kafka topics", "error", err)
+	}
+	events, err := kafkax.NewProducer(kafkaBrokers, log)
+	if err != nil {
+		log.Error("failed to create kafka producer", "error", err)
+		os.Exit(1)
+	}
+	defer events.Close()
+
 	lis, err := net.Listen("tcp", addr)
 	if err != nil {
 		log.Error("failed to listen", "addr", addr, "error", err)
@@ -114,7 +131,7 @@ func main() {
 	}
 
 	grpcServer := grpc.NewServer()
-	gamev1.RegisterGameServiceServer(grpcServer, server.New(st, eng, sess, log))
+	gamev1.RegisterGameServiceServer(grpcServer, server.New(st, eng, sess, events, analysisDepth, log))
 	// Identity lives beside the users table but is a separate service: the
 	// gateway owns sessions, this only verifies credentials.
 	deliverTokens := config.Getenv("ACG_MAIL_ENABLED", "false") == "true"
@@ -135,7 +152,7 @@ func main() {
 
 	log.Info("game-service started", "version", version, "addr", addr,
 		"engine", engineAddr, "session", sessionAddr, "session_enabled", sess.Enabled(),
-		"eval_cache", evalCache.Enabled())
+		"eval_cache", evalCache.Enabled(), "kafka", kafkaBrokers, "analysis", events.Enabled())
 	if err := grpcServer.Serve(lis); err != nil {
 		log.Error("grpc serve failed", "error", err)
 		os.Exit(1)

@@ -14,10 +14,11 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/chess"
+	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/engine"
+	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/kafkax"
+	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/store"
 	gamev1 "github.com/IshaanNene/AlekhinesCounter-Gambit/proto/gen/go/game/v1"
-	"github.com/IshaanNene/AlekhinesCounter-Gambit/services/game-service/internal/engine"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/services/game-service/internal/session"
-	"github.com/IshaanNene/AlekhinesCounter-Gambit/services/game-service/internal/store"
 )
 
 // engineMoveTimeout bounds how long we wait for an engine reply.
@@ -33,13 +34,22 @@ type Server struct {
 	store   *store.Store
 	engine  *engine.Client
 	session *session.Client
-	log     *slog.Logger
+	// events queues finished games for analysis. May be disabled.
+	events        *kafkax.Producer
+	analysisDepth int
+	log           *slog.Logger
 }
 
-// New builds a Server. sess may be a disabled client, in which case live
-// sessions are skipped.
-func New(st *store.Store, eng *engine.Client, sess *session.Client, log *slog.Logger) *Server {
-	return &Server{store: st, engine: eng, session: sess, log: log}
+// New builds a Server. sess and events may be disabled clients, in which case
+// live sessions and background analysis are skipped respectively.
+func New(st *store.Store, eng *engine.Client, sess *session.Client, events *kafkax.Producer, analysisDepth int, log *slog.Logger) *Server {
+	if analysisDepth <= 0 {
+		analysisDepth = 14
+	}
+	return &Server{
+		store: st, engine: eng, session: sess,
+		events: events, analysisDepth: analysisDepth, log: log,
+	}
 }
 
 // CreateGame starts a new game. When white_id is empty a guest user is created;
@@ -149,6 +159,7 @@ func (s *Server) SubmitMove(ctx context.Context, req *gamev1.SubmitMoveRequest) 
 	}
 	if ended {
 		s.applyRatings(ctx, g.ID, result)
+		s.requestAnalysis(ctx, g.ID)
 	}
 
 	// Engine reply, when applicable and the game is still going.
@@ -263,6 +274,7 @@ func (s *Server) Resign(ctx context.Context, req *gamev1.ResignRequest) (*gamev1
 		}
 	}
 	s.applyRatings(ctx, g.ID, winner)
+	s.requestAnalysis(ctx, g.ID)
 
 	updated, moves, err := s.store.GetGame(ctx, g.ID)
 	if err != nil {

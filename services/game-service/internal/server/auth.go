@@ -20,8 +20,8 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/store"
 	authv1 "github.com/IshaanNene/AlekhinesCounter-Gambit/proto/gen/go/auth/v1"
-	"github.com/IshaanNene/AlekhinesCounter-Gambit/services/game-service/internal/store"
 )
 
 // Password policy. Length is the control that actually matters; complexity
