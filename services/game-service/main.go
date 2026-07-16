@@ -21,6 +21,7 @@ import (
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/config"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/engine"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/kafkax"
+	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/objstore"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/redisx"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/store"
 	authv1 "github.com/IshaanNene/AlekhinesCounter-Gambit/proto/gen/go/auth/v1"
@@ -57,6 +58,8 @@ func main() {
 	// Empty disables background analysis; games are still played and stored.
 	kafkaBrokers := config.Getenv("ACG_KAFKA_BROKERS", "")
 	analysisDepth, _ := strconv.Atoi(config.Getenv("ACG_ANALYSIS_DEPTH", "14"))
+	// Empty disables PGN archival; games are still played and stored.
+	s3Endpoint := config.Getenv("ACG_S3_ENDPOINT", "")
 	// Empty disables live sessions (engine-only games still work).
 	sessionAddr := config.Getenv("ACG_SESSION_ADDR", "")
 
@@ -124,6 +127,21 @@ func main() {
 	}
 	defer events.Close()
 
+	// Object storage is an archive, not a dependency: log and carry on if absent.
+	objects, err := objstore.Dial(ctx, objstore.Config{
+		Endpoint:  s3Endpoint,
+		AccessKey: config.Getenv("ACG_S3_ACCESS_KEY", ""),
+		SecretKey: config.Getenv("ACG_S3_SECRET_KEY", ""),
+		UseSSL:    config.Getenv("ACG_S3_SSL", "false") == "true",
+		// The endpoint a browser reaches, when it differs from the internal one.
+		PublicEndpoint: config.Getenv("ACG_S3_PUBLIC_ENDPOINT", ""),
+		PublicSSL:      config.Getenv("ACG_S3_PUBLIC_SSL", "false") == "true",
+		Region:         config.Getenv("ACG_S3_REGION", "us-east-1"),
+	})
+	if err != nil {
+		log.Warn("object storage unavailable — PGN archival disabled", "endpoint", s3Endpoint, "error", err)
+	}
+
 	lis, err := net.Listen("tcp", addr)
 	if err != nil {
 		log.Error("failed to listen", "addr", addr, "error", err)
@@ -131,7 +149,7 @@ func main() {
 	}
 
 	grpcServer := grpc.NewServer()
-	gamev1.RegisterGameServiceServer(grpcServer, server.New(st, eng, sess, events, analysisDepth, log))
+	gamev1.RegisterGameServiceServer(grpcServer, server.New(st, eng, sess, events, objects, analysisDepth, log))
 	// Identity lives beside the users table but is a separate service: the
 	// gateway owns sessions, this only verifies credentials.
 	deliverTokens := config.Getenv("ACG_MAIL_ENABLED", "false") == "true"
@@ -152,7 +170,8 @@ func main() {
 
 	log.Info("game-service started", "version", version, "addr", addr,
 		"engine", engineAddr, "session", sessionAddr, "session_enabled", sess.Enabled(),
-		"eval_cache", evalCache.Enabled(), "kafka", kafkaBrokers, "analysis", events.Enabled())
+		"eval_cache", evalCache.Enabled(), "kafka", kafkaBrokers, "analysis", events.Enabled(),
+		"object_store", objects.Enabled())
 	if err := grpcServer.Serve(lis); err != nil {
 		log.Error("grpc serve failed", "error", err)
 		os.Exit(1)

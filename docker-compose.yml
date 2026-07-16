@@ -51,6 +51,26 @@ services:
       timeout: 3s
       retries: 10
 
+  # MinIO: S3-compatible object storage for PGN archives, analysis artifacts, and
+  # opening books. S3-compatible on purpose — the same code and the same client
+  # talk to AWS S3 or GCS in Q4 by changing only the endpoint and credentials.
+  minio:
+    image: minio/minio:RELEASE.2025-04-08T15-41-24Z
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: acg
+      MINIO_ROOT_PASSWORD: acg-secret-key
+    ports:
+      - "9000:9000"  # S3 API
+      - "9001:9001"  # web console
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - miniodata:/data
+
   # Kafka in KRaft mode: no ZooKeeper. The event backbone that decouples live
   # play from the async analysis pipeline.
   kafka:
@@ -102,6 +122,10 @@ services:
       ACG_REDIS_ADDR: "redis:6379"
       ACG_KAFKA_BROKERS: "kafka:9092"
       ACG_ANALYSIS_DEPTH: "12"
+      ACG_S3_ENDPOINT: "minio:9000"
+      ACG_S3_ACCESS_KEY: "acg"
+      ACG_S3_SECRET_KEY: "acg-secret-key"
+      ACG_S3_PUBLIC_ENDPOINT: "localhost:9000"
       ACG_RUN_MIGRATIONS: "true"
     ports:
       - "50051:50051"
@@ -130,10 +154,15 @@ services:
       ACG_ENGINE_ADDR: "engine-worker:50052"
       ACG_REDIS_ADDR: "redis:6379"
       ACG_ANALYSIS_DEPTH: "12"
+      ACG_S3_ENDPOINT: "minio:9000"
+      ACG_S3_ACCESS_KEY: "acg"
+      ACG_S3_SECRET_KEY: "acg-secret-key"
     depends_on:
       postgres:
         condition: service_healthy
       kafka:
+        condition: service_healthy
+      minio:
         condition: service_healthy
       redis:
         condition: service_healthy

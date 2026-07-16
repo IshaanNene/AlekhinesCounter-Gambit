@@ -11,6 +11,7 @@ import (
 
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/chess"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/kafkax"
+	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/objstore"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/rating"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/store"
 	analysisv1 "github.com/IshaanNene/AlekhinesCounter-Gambit/proto/gen/go/analysis/v1"
@@ -122,6 +123,68 @@ func (s *Server) requestAnalysis(ctx context.Context, gameID string) {
 	}
 }
 
+// archivePGN writes a finished game's PGN to object storage.
+//
+// Best-effort and fire-and-forget: the archive is a convenience for export and
+// history download, never the source of truth (Postgres is). A store outage must
+// not fail the move that ended the game.
+func (s *Server) archivePGN(ctx context.Context, gameID string) {
+	if !s.objects.Enabled() {
+		return
+	}
+	g, moves, err := s.store.GetGame(ctx, gameID)
+	if err != nil || len(moves) == 0 {
+		return
+	}
+
+	ucis := make([]string, 0, len(moves))
+	for _, m := range moves {
+		ucis = append(ucis, m.UCI)
+	}
+	white, black := "Guest", "Guest"
+	if u, err := s.store.GetUser(ctx, g.WhiteID); err == nil {
+		white = u.Username
+	}
+	if g.VsEngine {
+		black = "Stockfish"
+	} else if u, err := s.store.GetUser(ctx, g.BlackID); err == nil {
+		black = u.Username
+	}
+
+	pgn, err := chess.PGN(chess.StartFEN, ucis, map[string]string{
+		"Event":  "Alekhine's Counter-Gambit",
+		"Site":   "localhost",
+		"Date":   g.StartedAt.Format("2006.01.02"),
+		"White":  white,
+		"Black":  black,
+		"Result": pgnResult(g.Status),
+	})
+	if err != nil {
+		s.log.Warn("could not render pgn", "game_id", gameID, "error", err)
+		return
+	}
+
+	octx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	if err := s.objects.Put(octx, objstore.BucketPGN, gameID+".pgn", []byte(pgn), "application/x-chess-pgn"); err != nil {
+		s.log.Warn("could not archive pgn", "game_id", gameID, "error", err)
+	}
+}
+
+// pgnResult maps a stored status to the PGN result token.
+func pgnResult(status string) string {
+	switch status {
+	case "WHITE_WON":
+		return "1-0"
+	case "BLACK_WON":
+		return "0-1"
+	case "DRAW":
+		return "1/2-1/2"
+	default:
+		return "*"
+	}
+}
+
 // applyRatings scores a finished rated game. Errors are logged, not returned:
 // the result is already durable, and failing the move that ended the game would
 // be a worse outcome than a rating that needs backfilling.
@@ -201,4 +264,29 @@ func toSideAnalysis(s store.SideReport) *gamev1.SideAnalysis {
 		Mistakes:     uint32(s.Mistakes),
 		Inaccuracies: uint32(s.Inaccuracies),
 	}
+}
+
+// GamePgnUrl returns a presigned download URL for a game's archived PGN.
+//
+// Presigned so the client downloads straight from object storage rather than
+// streaming a file through the gateway. Empty url (not an error) means the game
+// has not been archived — it may still be in progress, or archival is disabled.
+func (s *Server) GamePgnUrl(ctx context.Context, req *gamev1.GamePgnUrlRequest) (*gamev1.GamePgnUrlResponse, error) {
+	if req.GetGameId() == "" {
+		return nil, status.Error(codes.InvalidArgument, "game_id is required")
+	}
+	if !s.objects.Enabled() {
+		return &gamev1.GamePgnUrlResponse{}, nil
+	}
+	key := req.GetGameId() + ".pgn"
+	exists, err := s.objects.Exists(ctx, objstore.BucketPGN, key)
+	if err != nil || !exists {
+		return &gamev1.GamePgnUrlResponse{}, nil
+	}
+	url, err := s.objects.PresignedGet(ctx, objstore.BucketPGN, key,
+		15*time.Minute, req.GetGameId()+".pgn")
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "presign pgn: %v", err)
+	}
+	return &gamev1.GamePgnUrlResponse{Url: url}, nil
 }

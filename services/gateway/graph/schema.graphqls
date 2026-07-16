@@ -139,6 +139,11 @@ type Query {
   "Fetch a game and its full move list."
   game(id: ID!): Game
   """
+  A short-lived download URL for a finished game's PGN, or null when the game has
+  no archived PGN yet. The client downloads straight from object storage.
+  """
+  gamePgnUrl(gameId: ID!): String
+  """
   A finished game's engine report. Null while it is still being analysed, so a
   client should treat absence as "analysing…" rather than an error.
   """

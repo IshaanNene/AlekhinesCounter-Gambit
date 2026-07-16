@@ -26,6 +26,7 @@ const (
 	GameService_JoinGame_FullMethodName    = "/alekhine.game.v1.GameService/JoinGame"
 	GameService_ListGames_FullMethodName   = "/alekhine.game.v1.GameService/ListGames"
 	GameService_Leaderboard_FullMethodName = "/alekhine.game.v1.GameService/Leaderboard"
+	GameService_GamePgnUrl_FullMethodName  = "/alekhine.game.v1.GameService/GamePgnUrl"
 	GameService_GetAnalysis_FullMethodName = "/alekhine.game.v1.GameService/GetAnalysis"
 	GameService_LegalMoves_FullMethodName  = "/alekhine.game.v1.GameService/LegalMoves"
 )
@@ -51,6 +52,8 @@ type GameServiceClient interface {
 	ListGames(ctx context.Context, in *ListGamesRequest, opts ...grpc.CallOption) (*ListGamesResponse, error)
 	// Leaderboard returns the highest-rated accounts.
 	Leaderboard(ctx context.Context, in *LeaderboardRequest, opts ...grpc.CallOption) (*LeaderboardResponse, error)
+	// GamePgnUrl returns a short-lived download URL for a finished game's PGN.
+	GamePgnUrl(ctx context.Context, in *GamePgnUrlRequest, opts ...grpc.CallOption) (*GamePgnUrlResponse, error)
 	// GetAnalysis returns a finished game's report. NOT_FOUND while the worker
 	// has not analysed it yet — an ordinary state, not an error.
 	GetAnalysis(ctx context.Context, in *GetAnalysisRequest, opts ...grpc.CallOption) (*GetAnalysisResponse, error)
@@ -138,6 +141,16 @@ func (c *gameServiceClient) Leaderboard(ctx context.Context, in *LeaderboardRequ
 	return out, nil
 }
 
+func (c *gameServiceClient) GamePgnUrl(ctx context.Context, in *GamePgnUrlRequest, opts ...grpc.CallOption) (*GamePgnUrlResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GamePgnUrlResponse)
+	err := c.cc.Invoke(ctx, GameService_GamePgnUrl_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *gameServiceClient) GetAnalysis(ctx context.Context, in *GetAnalysisRequest, opts ...grpc.CallOption) (*GetAnalysisResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetAnalysisResponse)
@@ -179,6 +192,8 @@ type GameServiceServer interface {
 	ListGames(context.Context, *ListGamesRequest) (*ListGamesResponse, error)
 	// Leaderboard returns the highest-rated accounts.
 	Leaderboard(context.Context, *LeaderboardRequest) (*LeaderboardResponse, error)
+	// GamePgnUrl returns a short-lived download URL for a finished game's PGN.
+	GamePgnUrl(context.Context, *GamePgnUrlRequest) (*GamePgnUrlResponse, error)
 	// GetAnalysis returns a finished game's report. NOT_FOUND while the worker
 	// has not analysed it yet — an ordinary state, not an error.
 	GetAnalysis(context.Context, *GetAnalysisRequest) (*GetAnalysisResponse, error)
@@ -216,6 +231,9 @@ func (UnimplementedGameServiceServer) ListGames(context.Context, *ListGamesReque
 }
 func (UnimplementedGameServiceServer) Leaderboard(context.Context, *LeaderboardRequest) (*LeaderboardResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Leaderboard not implemented")
+}
+func (UnimplementedGameServiceServer) GamePgnUrl(context.Context, *GamePgnUrlRequest) (*GamePgnUrlResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GamePgnUrl not implemented")
 }
 func (UnimplementedGameServiceServer) GetAnalysis(context.Context, *GetAnalysisRequest) (*GetAnalysisResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetAnalysis not implemented")
@@ -370,6 +388,24 @@ func _GameService_Leaderboard_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _GameService_GamePgnUrl_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GamePgnUrlRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GameServiceServer).GamePgnUrl(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: GameService_GamePgnUrl_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GameServiceServer).GamePgnUrl(ctx, req.(*GamePgnUrlRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _GameService_GetAnalysis_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetAnalysisRequest)
 	if err := dec(in); err != nil {
@@ -440,6 +476,10 @@ var GameService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Leaderboard",
 			Handler:    _GameService_Leaderboard_Handler,
+		},
+		{
+			MethodName: "GamePgnUrl",
+			Handler:    _GameService_GamePgnUrl_Handler,
 		},
 		{
 			MethodName: "GetAnalysis",

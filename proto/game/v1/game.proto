@@ -21,6 +21,8 @@ service GameService {
   rpc ListGames(ListGamesRequest) returns (ListGamesResponse);
   // Leaderboard returns the highest-rated accounts.
   rpc Leaderboard(LeaderboardRequest) returns (LeaderboardResponse);
+  // GamePgnUrl returns a short-lived download URL for a finished game's PGN.
+  rpc GamePgnUrl(GamePgnUrlRequest) returns (GamePgnUrlResponse);
   // GetAnalysis returns a finished game's report. NOT_FOUND while the worker
   // has not analysed it yet — an ordinary state, not an error.
   rpc GetAnalysis(GetAnalysisRequest) returns (GetAnalysisResponse);
@@ -152,6 +154,15 @@ message LegalMovesResponse {
   // Legal moves in UCI notation for the side to move. Empty when the game is
   // over (checkmate or stalemate).
   repeated string uci = 1;
+}
+
+message GamePgnUrlRequest {
+  string game_id = 1;
+}
+
+message GamePgnUrlResponse {
+  // Presigned, time-limited URL. Empty when the game has no archived PGN yet.
+  string url = 1;
 }
 
 message GetAnalysisRequest {

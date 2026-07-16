@@ -6,6 +6,8 @@
 
 import { gql } from "./graphql.js";
 
+const PGN_URL = `query($id: ID!) { gamePgnUrl(gameId: $id) }`;
+
 const ANALYSIS = `query($id: ID!) {
   gameAnalysis(gameId: $id) {
     depth
@@ -18,6 +20,15 @@ const ANALYSIS = `query($id: ID!) {
 }`;
 
 const $ = (id) => document.getElementById(id);
+
+// A tiny toast shim so this module needs no import from app.js.
+function toastLike(msg) {
+  const el = document.getElementById("toast");
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.add("is-visible");
+  setTimeout(() => el.classList.remove("is-visible"), 3000);
+}
 
 /** Symbols for the move list, mirroring the engine's verdicts. */
 export const QUALITY_ICON = {
@@ -122,6 +133,24 @@ function render(a) {
   el.append(statRow("Blunders", `${a.white.blunders} · ${a.black.blunders}`));
   el.append(statRow("Mistakes", `${a.white.mistakes} · ${a.black.mistakes}`));
   el.append(statRow("Depth", String(a.depth)));
+
+  // Download the game as PGN, straight from object storage.
+  const dl = document.createElement("button");
+  dl.className = "btn btn--ghost";
+  dl.textContent = "⬇ Download PGN";
+  dl.addEventListener("click", async () => {
+    try {
+      const data = await gql(PGN_URL, { id: held.report.gameId });
+      if (data.gamePgnUrl) {
+        window.location.href = data.gamePgnUrl; // presigned; browser saves the file
+      } else {
+        toastLike("The PGN is not ready yet — try again in a moment.");
+      }
+    } catch {
+      toastLike("Could not fetch the PGN.");
+    }
+  });
+  el.append(dl);
 
   // A theoretical novelty is rare enough to call out.
   if (a.noveltyFen) {

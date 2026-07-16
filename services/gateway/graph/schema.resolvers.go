@@ -293,6 +293,19 @@ func (r *queryResolver) Game(ctx context.Context, id string) (*model.Game, error
 	return toModelGame(resp.GetGame()), nil
 }
 
+// GamePgnURL is the resolver for the gamePgnUrl field.
+func (r *queryResolver) GamePgnURL(ctx context.Context, gameID string) (*string, error) {
+	resp, err := r.Upstream.Game.GamePgnUrl(ctx, &gamev1.GamePgnUrlRequest{GameId: gameID})
+	if err != nil {
+		return nil, err
+	}
+	if resp.GetUrl() == "" {
+		return nil, nil // not archived yet
+	}
+	url := resp.GetUrl()
+	return &url, nil
+}
+
 // GameAnalysis is the resolver for the gameAnalysis field.
 func (r *queryResolver) GameAnalysis(ctx context.Context, gameID string) (*model.GameAnalysis, error) {
 	resp, err := r.Upstream.Game.GetAnalysis(ctx, &gamev1.GetAnalysisRequest{GameId: gameID})

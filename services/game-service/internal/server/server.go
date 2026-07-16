@@ -16,6 +16,7 @@ import (
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/chess"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/engine"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/kafkax"
+	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/objstore"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/store"
 	gamev1 "github.com/IshaanNene/AlekhinesCounter-Gambit/proto/gen/go/game/v1"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/services/game-service/internal/session"
@@ -35,20 +36,22 @@ type Server struct {
 	engine  *engine.Client
 	session *session.Client
 	// events queues finished games for analysis. May be disabled.
-	events        *kafkax.Producer
+	events *kafkax.Producer
+	// objects archives finished PGNs. May be disabled.
+	objects       *objstore.Store
 	analysisDepth int
 	log           *slog.Logger
 }
 
 // New builds a Server. sess and events may be disabled clients, in which case
 // live sessions and background analysis are skipped respectively.
-func New(st *store.Store, eng *engine.Client, sess *session.Client, events *kafkax.Producer, analysisDepth int, log *slog.Logger) *Server {
+func New(st *store.Store, eng *engine.Client, sess *session.Client, events *kafkax.Producer, objects *objstore.Store, analysisDepth int, log *slog.Logger) *Server {
 	if analysisDepth <= 0 {
 		analysisDepth = 14
 	}
 	return &Server{
 		store: st, engine: eng, session: sess,
-		events: events, analysisDepth: analysisDepth, log: log,
+		events: events, objects: objects, analysisDepth: analysisDepth, log: log,
 	}
 }
 
@@ -160,6 +163,7 @@ func (s *Server) SubmitMove(ctx context.Context, req *gamev1.SubmitMoveRequest) 
 	if ended {
 		s.applyRatings(ctx, g.ID, result)
 		s.requestAnalysis(ctx, g.ID)
+		s.archivePGN(ctx, g.ID)
 	}
 
 	// Engine reply, when applicable and the game is still going.
@@ -275,6 +279,7 @@ func (s *Server) Resign(ctx context.Context, req *gamev1.ResignRequest) (*gamev1
 	}
 	s.applyRatings(ctx, g.ID, winner)
 	s.requestAnalysis(ctx, g.ID)
+	s.archivePGN(ctx, g.ID)
 
 	updated, moves, err := s.store.GetGame(ctx, g.ID)
 	if err != nil {
