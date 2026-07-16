@@ -188,10 +188,10 @@ downloadable; opening book influences engine play.
 - [x] Fair-play signals for human review (RedisTimeSeries) — see ADR-0003
 
 ### Epic 3.3 — MinIO object storage
-- [ ] Store PGN archives (S3-compatible)
+- [x] Store PGN archives (S3-compatible, real SAN generated from the game)
+- [x] Presigned download URLs via the gateway (split-horizon aware)
 - [ ] Store full analysis artifacts (JSON) keyed by game id
 - [ ] Opening book files + serve to engine workers
-- [ ] Presigned download URLs via the gateway
 
 ### Epic 3.4 — Ratings & history
 - [ ] Elo/Glicko rating updates on game completion
