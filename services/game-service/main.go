@@ -18,6 +18,8 @@ import (
 	healthv1 "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
 
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/config"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/engine"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/kafkax"
@@ -29,7 +31,6 @@ import (
 	gamev1 "github.com/IshaanNene/AlekhinesCounter-Gambit/proto/gen/go/game/v1"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/services/game-service/internal/server"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/services/game-service/internal/session"
-	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 )
 
 var version = "dev"

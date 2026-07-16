@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
@@ -76,8 +77,8 @@ func NewMetrics(service string) *Metrics {
 	// Go runtime and process metrics come free and are genuinely useful (GC,
 	// goroutines, memory, fds).
 	reg.MustRegister(
-		prometheus.NewGoCollector(),
-		prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}),
+		collectors.NewGoCollector(),
+		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 		m.RPCRequests, m.RPCDuration, m.GamesActive, m.MovesTotal, m.GamesFinished,
 		m.EngineAnalyses, m.CacheHits, m.CacheMisses, m.MatchmakingWait,
 	)
