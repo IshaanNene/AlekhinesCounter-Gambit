@@ -23,6 +23,6 @@ FROM nginx:1.27-alpine
 COPY web/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=stamp /src/index.html /src/styles.css /src/app.js /src/chess.js \
      /src/graphql.js /src/settings.js /src/settings-ui.js /src/account.js \
-     /src/analysis.js /usr/share/nginx/html/
+     /src/analysis.js /src/explorer.js /usr/share/nginx/html/
 
 EXPOSE 80
