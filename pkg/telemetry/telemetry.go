@@ -18,11 +18,11 @@ import (
 	"time"
 
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 )
 
 // Shutdown flushes and stops telemetry. Always safe to call.
@@ -54,10 +54,13 @@ func InitTracing(ctx context.Context, serviceName, version, endpoint string) (Sh
 		return nil, fmt.Errorf("otlp trace exporter: %w", err)
 	}
 
-	res, err := resource.Merge(resource.Default(), resource.NewWithAttributes(
-		semconv.SchemaURL,
-		semconv.ServiceName(serviceName),
-		semconv.ServiceVersion(version),
+	// Merge onto Default() using a schema-less attribute set: passing our own
+	// semconv SchemaURL here conflicts with the SDK's when the two track
+	// different semconv versions, and resource.Merge then errors. The attribute
+	// keys are stable across versions, so carrying no schema URL is safe.
+	res, err := resource.Merge(resource.Default(), resource.NewSchemaless(
+		attribute.String("service.name", serviceName),
+		attribute.String("service.version", version),
 	))
 	if err != nil {
 		return nil, fmt.Errorf("otel resource: %w", err)
