@@ -335,37 +335,37 @@ outcomes — expand each into T-level subtasks when you start the epic.
 
 # Q3 — Event-driven Data & Analysis  (task specs)
 
-### [ ] T3.1 — Kafka backbone (KRaft) + topics
+### [x] T3.1 — Kafka backbone (KRaft) + topics
 **Depends on:** T1.8
 **Context:** Add Kafka to compose; create topics `moves`, `game-events`, `analysis-requests`, `analysis-results`. Protobuf-serialized payloads. Define partitioning keys (game_id).
 **Acceptance:** produce/consume a test message on each topic.
 **Commit:** `feat(kafka): event backbone with core topics`
 
-### [ ] T3.2 — Game-service produces events
+### [x] T3.2 — Game-service produces events
 **Depends on:** T3.1, T1.7
 **Context:** Emit move + game-lifecycle events to Kafka (outbox pattern to avoid dual-write loss).
 **Acceptance:** every persisted move produces exactly one `moves` event.
 **Commit:** `feat(game-service): emit domain events via outbox`
 
-### [ ] T3.3 — Engine workers consume analysis requests (pull queue)
+### [x] T3.3 — Engine workers consume analysis requests (pull queue)
 **Depends on:** T3.1, T1.6
 **Context:** Workers join a consumer group on `analysis-requests`; scale = add replicas. Emit `analysis-results`.
 **Acceptance:** N workers share the load; results land on the results topic.
 **Commit:** `feat(engine-worker): consume analysis-requests as a work queue`
 
-### [ ] T3.4 — Full-game analysis pipeline
+### [x] T3.4 — Full-game analysis pipeline
 **Depends on:** T3.2, T3.3
 **Context:** On game end, enqueue per-position analysis; compute accuracy/blunders/mistakes; store per-move eval; expose eval-graph via GraphQL.
 **Acceptance:** a finished game yields a complete move-by-move eval graph.
 **Commit:** `feat(analysis): async full-game analysis + eval graph`
 
-### [ ] T3.5 — MinIO object storage
+### [x] T3.5 — MinIO object storage
 **Depends on:** T3.4
 **Context:** Store PGN archives + analysis JSON (keyed by game id) + opening books; presigned download URLs via gateway; workers load opening book from MinIO.
 **Acceptance:** download a game's PGN + analysis via presigned URL; engine uses book moves in the opening.
 **Commit:** `feat(minio): pgn/analysis archival + opening books`
 
-### [ ] T3.6 — Ratings, leaderboards, history, opening explorer
+### [x] T3.6 — Ratings, leaderboards, history, opening explorer
 **Depends on:** T3.2
 **Context:** Elo/Glicko update on completion; paginated history + leaderboards + opening explorer backed by stored games — all via GraphQL.
 **Acceptance:** completing games updates ratings; explorer returns move stats from real games.
@@ -446,5 +446,5 @@ observable in Grafana + Jaeger, load-tested with autoscaling — reproducible fr
 ## Progress tracker
 - Q1: ☑ T1.1 ☑ T1.2 ☑ T1.3 ☑ T1.4 ☑ T1.5 ☑ T1.6 ☑ T1.7 ☑ T1.8 ☑ T1.9
 - Q2: ☑ T2.1 ☑ T2.2 ☑ T2.3 ☑ T2.4 ☑ T2.5 ☑ T2.6 ☑ T2.7 ☑ T2.8  ← Q2 complete
-- Q3: ☐ T3.1 ☐ T3.2 ☐ T3.3 ☐ T3.4 ☐ T3.5 ☐ T3.6
+- Q3: ☑ T3.1 ☑ T3.2 ☑ T3.3 ☑ T3.4 ☑ T3.5 ☑ T3.6  ← Q3 complete
 - Q4: ☐ T4.1 ☐ T4.2 ☐ T4.3 ☐ T4.4 ☐ T4.5 ☐ T4.6 ☐ T4.7 ☐ T4.8 ☐ T4.9 ☐ T4.10

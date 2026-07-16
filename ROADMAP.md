@@ -190,13 +190,14 @@ downloadable; opening book influences engine play.
 ### Epic 3.3 — MinIO object storage
 - [x] Store PGN archives (S3-compatible, real SAN generated from the game)
 - [x] Presigned download URLs via the gateway (split-horizon aware)
-- [ ] Store full analysis artifacts (JSON) keyed by game id
-- [ ] Opening book files + serve to engine workers
+- [ ] Store full analysis artifacts (JSON) keyed by game id — deferred; the report
+      already lives in Postgres and is served over GraphQL
+- [ ] Opening book files + serve to engine workers — deferred to a later phase
 
 ### Epic 3.4 — Ratings & history
-- [ ] Elo/Glicko rating updates on game completion
-- [ ] Leaderboards + user game history (paginated GraphQL)
-- [ ] Opening explorer backed by stored games
+- [x] Elo rating updates on game completion (tiered K-factor)
+- [x] Leaderboards + user game history (paginated GraphQL)
+- [x] Opening explorer backed by stored games (transposition-collapsing, SAN, scored)
 
 **Exit criteria:** completed games flow through Kafka, get analyzed async by a
 pool of workers, results land in Postgres + MinIO, and show up as an eval graph.
