@@ -123,6 +123,23 @@ func (s *Server) requestAnalysis(ctx context.Context, gameID string) {
 	}
 }
 
+// ingestOpening folds a finished game into the opening explorer statistics.
+//
+// Fire-and-forget: the explorer is a derived aggregate, so a missed ingest costs
+// one game's worth of stats, never the move. Idempotent in the store, so a retry
+// is harmless.
+func (s *Server) ingestOpening(ctx context.Context, gameID, status string) {
+	fens, ucis, err := s.store.GameForAnalysis(ctx, gameID)
+	if err != nil || len(ucis) == 0 {
+		return
+	}
+	octx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	if err := s.store.IngestGameOpening(octx, gameID, status, fens, ucis); err != nil {
+		s.log.Warn("could not ingest opening", "game_id", gameID, "error", err)
+	}
+}
+
 // archivePGN writes a finished game's PGN to object storage.
 //
 // Best-effort and fire-and-forget: the archive is a convenience for export and
@@ -209,6 +226,37 @@ func (s *Server) applyRatings(ctx context.Context, gameID string, result chess.R
 	if applied {
 		s.log.Info("ratings applied", "game_id", gameID, "outcome", result)
 	}
+}
+
+// OpeningExplorer returns the moves played from a position, most popular first.
+func (s *Server) OpeningExplorer(ctx context.Context, req *gamev1.OpeningExplorerRequest) (*gamev1.OpeningExplorerResponse, error) {
+	fen := req.GetFen()
+	if fen == "" {
+		fen = chess.StartFEN
+	}
+	// Validate the FEN so a garbage key cannot be probed; also normalises it.
+	if _, err := chess.ParseFEN(fen); err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid fen: %v", err)
+	}
+
+	moves, err := s.store.OpeningExplorer(ctx, fen, int(req.GetLimit()))
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "opening explorer: %v", err)
+	}
+	out := make([]*gamev1.OpeningMove, 0, len(moves))
+	var total int64
+	for _, m := range moves {
+		total += m.Total
+		out = append(out, &gamev1.OpeningMove{
+			Uci:       m.UCI,
+			San:       m.SAN,
+			WhiteWins: m.WhiteWins,
+			BlackWins: m.BlackWins,
+			Draws:     m.Draws,
+			Total:     m.Total,
+		})
+	}
+	return &gamev1.OpeningExplorerResponse{Moves: out, TotalGames: total}, nil
 }
 
 // GetAnalysis returns a game's report.

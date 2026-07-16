@@ -19,16 +19,17 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	GameService_CreateGame_FullMethodName  = "/alekhine.game.v1.GameService/CreateGame"
-	GameService_SubmitMove_FullMethodName  = "/alekhine.game.v1.GameService/SubmitMove"
-	GameService_GetGame_FullMethodName     = "/alekhine.game.v1.GameService/GetGame"
-	GameService_Resign_FullMethodName      = "/alekhine.game.v1.GameService/Resign"
-	GameService_JoinGame_FullMethodName    = "/alekhine.game.v1.GameService/JoinGame"
-	GameService_ListGames_FullMethodName   = "/alekhine.game.v1.GameService/ListGames"
-	GameService_Leaderboard_FullMethodName = "/alekhine.game.v1.GameService/Leaderboard"
-	GameService_GamePgnUrl_FullMethodName  = "/alekhine.game.v1.GameService/GamePgnUrl"
-	GameService_GetAnalysis_FullMethodName = "/alekhine.game.v1.GameService/GetAnalysis"
-	GameService_LegalMoves_FullMethodName  = "/alekhine.game.v1.GameService/LegalMoves"
+	GameService_CreateGame_FullMethodName      = "/alekhine.game.v1.GameService/CreateGame"
+	GameService_SubmitMove_FullMethodName      = "/alekhine.game.v1.GameService/SubmitMove"
+	GameService_GetGame_FullMethodName         = "/alekhine.game.v1.GameService/GetGame"
+	GameService_Resign_FullMethodName          = "/alekhine.game.v1.GameService/Resign"
+	GameService_JoinGame_FullMethodName        = "/alekhine.game.v1.GameService/JoinGame"
+	GameService_ListGames_FullMethodName       = "/alekhine.game.v1.GameService/ListGames"
+	GameService_Leaderboard_FullMethodName     = "/alekhine.game.v1.GameService/Leaderboard"
+	GameService_GamePgnUrl_FullMethodName      = "/alekhine.game.v1.GameService/GamePgnUrl"
+	GameService_GetAnalysis_FullMethodName     = "/alekhine.game.v1.GameService/GetAnalysis"
+	GameService_OpeningExplorer_FullMethodName = "/alekhine.game.v1.GameService/OpeningExplorer"
+	GameService_LegalMoves_FullMethodName      = "/alekhine.game.v1.GameService/LegalMoves"
 )
 
 // GameServiceClient is the client API for GameService service.
@@ -57,6 +58,9 @@ type GameServiceClient interface {
 	// GetAnalysis returns a finished game's report. NOT_FOUND while the worker
 	// has not analysed it yet — an ordinary state, not an error.
 	GetAnalysis(ctx context.Context, in *GetAnalysisRequest, opts ...grpc.CallOption) (*GetAnalysisResponse, error)
+	// OpeningExplorer returns the moves played from a position across all finished
+	// games, most popular first — a database of what real players do from here.
+	OpeningExplorer(ctx context.Context, in *OpeningExplorerRequest, opts ...grpc.CallOption) (*OpeningExplorerResponse, error)
 	// LegalMoves lists every legal move in a game's current position. Clients use
 	// it to highlight destinations and validate premoves without reimplementing
 	// move generation — the rules stay in one place.
@@ -161,6 +165,16 @@ func (c *gameServiceClient) GetAnalysis(ctx context.Context, in *GetAnalysisRequ
 	return out, nil
 }
 
+func (c *gameServiceClient) OpeningExplorer(ctx context.Context, in *OpeningExplorerRequest, opts ...grpc.CallOption) (*OpeningExplorerResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(OpeningExplorerResponse)
+	err := c.cc.Invoke(ctx, GameService_OpeningExplorer_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *gameServiceClient) LegalMoves(ctx context.Context, in *LegalMovesRequest, opts ...grpc.CallOption) (*LegalMovesResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(LegalMovesResponse)
@@ -197,6 +211,9 @@ type GameServiceServer interface {
 	// GetAnalysis returns a finished game's report. NOT_FOUND while the worker
 	// has not analysed it yet — an ordinary state, not an error.
 	GetAnalysis(context.Context, *GetAnalysisRequest) (*GetAnalysisResponse, error)
+	// OpeningExplorer returns the moves played from a position across all finished
+	// games, most popular first — a database of what real players do from here.
+	OpeningExplorer(context.Context, *OpeningExplorerRequest) (*OpeningExplorerResponse, error)
 	// LegalMoves lists every legal move in a game's current position. Clients use
 	// it to highlight destinations and validate premoves without reimplementing
 	// move generation — the rules stay in one place.
@@ -237,6 +254,9 @@ func (UnimplementedGameServiceServer) GamePgnUrl(context.Context, *GamePgnUrlReq
 }
 func (UnimplementedGameServiceServer) GetAnalysis(context.Context, *GetAnalysisRequest) (*GetAnalysisResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetAnalysis not implemented")
+}
+func (UnimplementedGameServiceServer) OpeningExplorer(context.Context, *OpeningExplorerRequest) (*OpeningExplorerResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method OpeningExplorer not implemented")
 }
 func (UnimplementedGameServiceServer) LegalMoves(context.Context, *LegalMovesRequest) (*LegalMovesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method LegalMoves not implemented")
@@ -424,6 +444,24 @@ func _GameService_GetAnalysis_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _GameService_OpeningExplorer_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(OpeningExplorerRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GameServiceServer).OpeningExplorer(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: GameService_OpeningExplorer_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GameServiceServer).OpeningExplorer(ctx, req.(*OpeningExplorerRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _GameService_LegalMoves_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(LegalMovesRequest)
 	if err := dec(in); err != nil {
@@ -484,6 +522,10 @@ var GameService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetAnalysis",
 			Handler:    _GameService_GetAnalysis_Handler,
+		},
+		{
+			MethodName: "OpeningExplorer",
+			Handler:    _GameService_OpeningExplorer_Handler,
 		},
 		{
 			MethodName: "LegalMoves",

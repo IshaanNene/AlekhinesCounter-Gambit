@@ -140,16 +140,31 @@ type ComplexityRoot struct {
 		Resign            func(childComplexity int, input model.ResignInput) int
 	}
 
+	OpeningExplorer struct {
+		Moves      func(childComplexity int) int
+		TotalGames func(childComplexity int) int
+	}
+
+	OpeningMove struct {
+		BlackWins func(childComplexity int) int
+		Draws     func(childComplexity int) int
+		San       func(childComplexity int) int
+		Total     func(childComplexity int) int
+		Uci       func(childComplexity int) int
+		WhiteWins func(childComplexity int) int
+	}
+
 	Query struct {
-		Game         func(childComplexity int, id string) int
-		GameAnalysis func(childComplexity int, gameID string) int
-		GameHistory  func(childComplexity int, userID *string, limit *int, offset *int) int
-		GamePgnURL   func(childComplexity int, gameID string) int
-		Health       func(childComplexity int) int
-		Leaderboard  func(childComplexity int, limit *int) int
-		LegalMoves   func(childComplexity int, gameID string) int
-		Me           func(childComplexity int) int
-		User         func(childComplexity int, id string) int
+		Game            func(childComplexity int, id string) int
+		GameAnalysis    func(childComplexity int, gameID string) int
+		GameHistory     func(childComplexity int, userID *string, limit *int, offset *int) int
+		GamePgnURL      func(childComplexity int, gameID string) int
+		Health          func(childComplexity int) int
+		Leaderboard     func(childComplexity int, limit *int) int
+		LegalMoves      func(childComplexity int, gameID string) int
+		Me              func(childComplexity int) int
+		OpeningExplorer func(childComplexity int, fen *string, limit *int) int
+		User            func(childComplexity int, id string) int
 	}
 
 	QueueTicket struct {
@@ -216,6 +231,7 @@ type QueryResolver interface {
 	GameHistory(ctx context.Context, userID *string, limit *int, offset *int) (*model.GameHistory, error)
 	Leaderboard(ctx context.Context, limit *int) ([]*model.LeaderboardEntry, error)
 	Game(ctx context.Context, id string) (*model.Game, error)
+	OpeningExplorer(ctx context.Context, fen *string, limit *int) (*model.OpeningExplorer, error)
 	GamePgnURL(ctx context.Context, gameID string) (*string, error)
 	GameAnalysis(ctx context.Context, gameID string) (*model.GameAnalysis, error)
 	LegalMoves(ctx context.Context, gameID string) ([]string, error)
@@ -730,6 +746,56 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.Mutation.Resign(childComplexity, args["input"].(model.ResignInput)), true
 
+	case "OpeningExplorer.moves":
+		if e.ComplexityRoot.OpeningExplorer.Moves == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OpeningExplorer.Moves(childComplexity), true
+	case "OpeningExplorer.totalGames":
+		if e.ComplexityRoot.OpeningExplorer.TotalGames == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OpeningExplorer.TotalGames(childComplexity), true
+
+	case "OpeningMove.blackWins":
+		if e.ComplexityRoot.OpeningMove.BlackWins == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OpeningMove.BlackWins(childComplexity), true
+	case "OpeningMove.draws":
+		if e.ComplexityRoot.OpeningMove.Draws == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OpeningMove.Draws(childComplexity), true
+	case "OpeningMove.san":
+		if e.ComplexityRoot.OpeningMove.San == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OpeningMove.San(childComplexity), true
+	case "OpeningMove.total":
+		if e.ComplexityRoot.OpeningMove.Total == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OpeningMove.Total(childComplexity), true
+	case "OpeningMove.uci":
+		if e.ComplexityRoot.OpeningMove.Uci == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OpeningMove.Uci(childComplexity), true
+	case "OpeningMove.whiteWins":
+		if e.ComplexityRoot.OpeningMove.WhiteWins == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OpeningMove.WhiteWins(childComplexity), true
+
 	case "Query.game":
 		if e.ComplexityRoot.Query.Game == nil {
 			break
@@ -809,6 +875,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.Me(childComplexity), true
+	case "Query.openingExplorer":
+		if e.ComplexityRoot.Query.OpeningExplorer == nil {
+			break
+		}
+
+		args, err := ec.field_Query_openingExplorer_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.OpeningExplorer(childComplexity, args["fen"].(*string), args["limit"].(*int)), true
 	case "Query.user":
 		if e.ComplexityRoot.Query.User == nil {
 			break
@@ -1192,6 +1269,28 @@ type GameAnalysis {
   analyzedAt: Time!
 }
 
+"One continuation from a position in the opening explorer, and its record."
+type OpeningMove {
+  uci: String!
+  "Human-readable form, e.g. \"Nf3\"."
+  san: String!
+  whiteWins: Int!
+  blackWins: Int!
+  draws: Int!
+  total: Int!
+}
+
+"""
+What real players do from a position: every move played from it across all
+finished games, most popular first, with the score for each. Transpositions
+collapse together, so different move orders into the same position are counted as
+one.
+"""
+type OpeningExplorer {
+  moves: [OpeningMove!]!
+  totalGames: Int!
+}
+
 type Query {
   "The signed-in account, or null when signed out."
   me: User
@@ -1203,6 +1302,11 @@ type Query {
   leaderboard(limit: Int): [LeaderboardEntry!]!
   "Fetch a game and its full move list."
   game(id: ID!): Game
+  """
+  The opening explorer for a position (FEN). Omit the FEN for the starting
+  position.
+  """
+  openingExplorer(fen: String, limit: Int): OpeningExplorer!
   """
   A short-lived download URL for a finished game's PGN, or null when the game has
   no archived PGN yet. The client downloads straight from object storage.
@@ -1575,6 +1679,34 @@ func (ec *executionContext) childFields_MoveVerdict(ctx context.Context, field g
 		return ec.fieldContext_MoveVerdict_matchedEngine(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type MoveVerdict", field.Name)
+}
+
+func (ec *executionContext) childFields_OpeningExplorer(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "moves":
+		return ec.fieldContext_OpeningExplorer_moves(ctx, field)
+	case "totalGames":
+		return ec.fieldContext_OpeningExplorer_totalGames(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type OpeningExplorer", field.Name)
+}
+
+func (ec *executionContext) childFields_OpeningMove(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "uci":
+		return ec.fieldContext_OpeningMove_uci(ctx, field)
+	case "san":
+		return ec.fieldContext_OpeningMove_san(ctx, field)
+	case "whiteWins":
+		return ec.fieldContext_OpeningMove_whiteWins(ctx, field)
+	case "blackWins":
+		return ec.fieldContext_OpeningMove_blackWins(ctx, field)
+	case "draws":
+		return ec.fieldContext_OpeningMove_draws(ctx, field)
+	case "total":
+		return ec.fieldContext_OpeningMove_total(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type OpeningMove", field.Name)
 }
 
 func (ec *executionContext) childFields_QueueTicket(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
@@ -2006,6 +2138,28 @@ func (ec *executionContext) field_Query_legalMoves_args(ctx context.Context, raw
 		return nil, err
 	}
 	args["gameId"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_openingExplorer_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "fen",
+		func(ctx context.Context, v any) (*string, error) {
+			return ec.unmarshalOString2ᚖstring(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["fen"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "limit",
+		func(ctx context.Context, v any) (*int, error) {
+			return ec.unmarshalOInt2ᚖint(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["limit"] = arg1
 	return args, nil
 }
 
@@ -4003,6 +4157,199 @@ func (ec *executionContext) fieldContext_Mutation_leaveQueue(ctx context.Context
 	return fc, nil
 }
 
+func (ec *executionContext) _OpeningExplorer_moves(ctx context.Context, field graphql.CollectedField, obj *model.OpeningExplorer) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_OpeningExplorer_moves(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Moves, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []*model.OpeningMove) graphql.Marshaler {
+			return ec.marshalNOpeningMove2ᚕᚖgithubᚗcomᚋIshaanNeneᚋAlekhinesCounterᚑGambitᚋservicesᚋgatewayᚋgraphᚋmodelᚐOpeningMoveᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_OpeningExplorer_moves(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OpeningExplorer",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_OpeningMove(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OpeningExplorer_totalGames(ctx context.Context, field graphql.CollectedField, obj *model.OpeningExplorer) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_OpeningExplorer_totalGames(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.TotalGames, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v int) graphql.Marshaler {
+			return ec.marshalNInt2int(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_OpeningExplorer_totalGames(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("OpeningExplorer", field, false, false, errors.New("field of type Int does not have child fields"))
+}
+
+func (ec *executionContext) _OpeningMove_uci(ctx context.Context, field graphql.CollectedField, obj *model.OpeningMove) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_OpeningMove_uci(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Uci, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_OpeningMove_uci(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("OpeningMove", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _OpeningMove_san(ctx context.Context, field graphql.CollectedField, obj *model.OpeningMove) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_OpeningMove_san(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.San, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_OpeningMove_san(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("OpeningMove", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _OpeningMove_whiteWins(ctx context.Context, field graphql.CollectedField, obj *model.OpeningMove) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_OpeningMove_whiteWins(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.WhiteWins, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v int) graphql.Marshaler {
+			return ec.marshalNInt2int(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_OpeningMove_whiteWins(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("OpeningMove", field, false, false, errors.New("field of type Int does not have child fields"))
+}
+
+func (ec *executionContext) _OpeningMove_blackWins(ctx context.Context, field graphql.CollectedField, obj *model.OpeningMove) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_OpeningMove_blackWins(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.BlackWins, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v int) graphql.Marshaler {
+			return ec.marshalNInt2int(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_OpeningMove_blackWins(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("OpeningMove", field, false, false, errors.New("field of type Int does not have child fields"))
+}
+
+func (ec *executionContext) _OpeningMove_draws(ctx context.Context, field graphql.CollectedField, obj *model.OpeningMove) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_OpeningMove_draws(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Draws, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v int) graphql.Marshaler {
+			return ec.marshalNInt2int(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_OpeningMove_draws(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("OpeningMove", field, false, false, errors.New("field of type Int does not have child fields"))
+}
+
+func (ec *executionContext) _OpeningMove_total(ctx context.Context, field graphql.CollectedField, obj *model.OpeningMove) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_OpeningMove_total(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Total, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v int) graphql.Marshaler {
+			return ec.marshalNInt2int(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_OpeningMove_total(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("OpeningMove", field, false, false, errors.New("field of type Int does not have child fields"))
+}
+
 func (ec *executionContext) _Query_me(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -4205,6 +4552,50 @@ func (ec *executionContext) fieldContext_Query_game(ctx context.Context, field g
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Query_game_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_openingExplorer(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Query_openingExplorer(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().OpeningExplorer(ctx, fc.Args["fen"].(*string), fc.Args["limit"].(*int))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.OpeningExplorer) graphql.Marshaler {
+			return ec.marshalNOpeningExplorer2ᚖgithubᚗcomᚋIshaanNeneᚋAlekhinesCounterᚑGambitᚋservicesᚋgatewayᚋgraphᚋmodelᚐOpeningExplorer(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Query_openingExplorer(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_OpeningExplorer(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_openingExplorer_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -7047,6 +7438,112 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 	return out
 }
 
+var openingExplorerImplementors = []string{"OpeningExplorer"}
+
+func (ec *executionContext) _OpeningExplorer(ctx context.Context, sel ast.SelectionSet, obj *model.OpeningExplorer) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, openingExplorerImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferredFieldSet := graphql.NewFieldSet(nil)
+	deferLabelToView := make(map[string]*graphql.FieldSetView)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("OpeningExplorer")
+		case "moves":
+			out.Values[i] = ec._OpeningExplorer_moves(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "totalGames":
+			out.Values[i] = ec._OpeningExplorer_totalGames(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferLabelToView), math.MaxInt32)))
+
+	ec.ProcessDeferredGroup(graphql.DeferredGroup{
+		Defers:   deferLabelToView,
+		Path:     graphql.GetPath(ctx),
+		FieldSet: deferredFieldSet,
+		Context:  ctx,
+	})
+
+	return out
+}
+
+var openingMoveImplementors = []string{"OpeningMove"}
+
+func (ec *executionContext) _OpeningMove(ctx context.Context, sel ast.SelectionSet, obj *model.OpeningMove) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, openingMoveImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferredFieldSet := graphql.NewFieldSet(nil)
+	deferLabelToView := make(map[string]*graphql.FieldSetView)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("OpeningMove")
+		case "uci":
+			out.Values[i] = ec._OpeningMove_uci(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "san":
+			out.Values[i] = ec._OpeningMove_san(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "whiteWins":
+			out.Values[i] = ec._OpeningMove_whiteWins(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "blackWins":
+			out.Values[i] = ec._OpeningMove_blackWins(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "draws":
+			out.Values[i] = ec._OpeningMove_draws(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "total":
+			out.Values[i] = ec._OpeningMove_total(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferLabelToView), math.MaxInt32)))
+
+	ec.ProcessDeferredGroup(graphql.DeferredGroup{
+		Defers:   deferLabelToView,
+		Path:     graphql.GetPath(ctx),
+		FieldSet: deferredFieldSet,
+		Context:  ctx,
+	})
+
+	return out
+}
+
 var queryImplementors = []string{"Query"}
 
 func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) graphql.Marshaler {
@@ -7166,6 +7663,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 				}()
 				res = ec._Query_game(ctx, field)
 				if res == graphql.RequiredNull {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "openingExplorer":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_openingExplorer(ctx, field)
+				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
 				return res
@@ -8174,6 +8693,46 @@ func (ec *executionContext) marshalNMoveVerdict2ᚖgithubᚗcomᚋIshaanNeneᚋA
 		return graphql.Null
 	}
 	return ec._MoveVerdict(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNOpeningExplorer2githubᚗcomᚋIshaanNeneᚋAlekhinesCounterᚑGambitᚋservicesᚋgatewayᚋgraphᚋmodelᚐOpeningExplorer(ctx context.Context, sel ast.SelectionSet, v model.OpeningExplorer) graphql.Marshaler {
+	return ec._OpeningExplorer(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNOpeningExplorer2ᚖgithubᚗcomᚋIshaanNeneᚋAlekhinesCounterᚑGambitᚋservicesᚋgatewayᚋgraphᚋmodelᚐOpeningExplorer(ctx context.Context, sel ast.SelectionSet, v *model.OpeningExplorer) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._OpeningExplorer(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNOpeningMove2ᚕᚖgithubᚗcomᚋIshaanNeneᚋAlekhinesCounterᚑGambitᚋservicesᚋgatewayᚋgraphᚋmodelᚐOpeningMoveᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.OpeningMove) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNOpeningMove2ᚖgithubᚗcomᚋIshaanNeneᚋAlekhinesCounterᚑGambitᚋservicesᚋgatewayᚋgraphᚋmodelᚐOpeningMove(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNOpeningMove2ᚖgithubᚗcomᚋIshaanNeneᚋAlekhinesCounterᚑGambitᚋservicesᚋgatewayᚋgraphᚋmodelᚐOpeningMove(ctx context.Context, sel ast.SelectionSet, v *model.OpeningMove) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._OpeningMove(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalNQueueInput2githubᚗcomᚋIshaanNeneᚋAlekhinesCounterᚑGambitᚋservicesᚋgatewayᚋgraphᚋmodelᚐQueueInput(ctx context.Context, v any) (model.QueueInput, error) {

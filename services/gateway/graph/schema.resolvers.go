@@ -293,6 +293,26 @@ func (r *queryResolver) Game(ctx context.Context, id string) (*model.Game, error
 	return toModelGame(resp.GetGame()), nil
 }
 
+// OpeningExplorer is the resolver for the openingExplorer field.
+func (r *queryResolver) OpeningExplorer(ctx context.Context, fen *string, limit *int) (*model.OpeningExplorer, error) {
+	resp, err := r.Upstream.Game.OpeningExplorer(ctx, &gamev1.OpeningExplorerRequest{
+		Fen:   deref(fen),
+		Limit: int32(derefInt(limit)),
+	})
+	if err != nil {
+		return nil, err
+	}
+	moves := make([]*model.OpeningMove, 0, len(resp.GetMoves()))
+	for _, m := range resp.GetMoves() {
+		moves = append(moves, &model.OpeningMove{
+			Uci: m.GetUci(), San: m.GetSan(),
+			WhiteWins: int(m.GetWhiteWins()), BlackWins: int(m.GetBlackWins()),
+			Draws: int(m.GetDraws()), Total: int(m.GetTotal()),
+		})
+	}
+	return &model.OpeningExplorer{Moves: moves, TotalGames: int(resp.GetTotalGames())}, nil
+}
+
 // GamePgnURL is the resolver for the gamePgnUrl field.
 func (r *queryResolver) GamePgnURL(ctx context.Context, gameID string) (*string, error) {
 	resp, err := r.Upstream.Game.GamePgnUrl(ctx, &gamev1.GamePgnUrlRequest{GameId: gameID})

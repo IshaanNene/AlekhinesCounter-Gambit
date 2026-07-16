@@ -127,6 +127,28 @@ type GameAnalysis {
   analyzedAt: Time!
 }
 
+"One continuation from a position in the opening explorer, and its record."
+type OpeningMove {
+  uci: String!
+  "Human-readable form, e.g. \"Nf3\"."
+  san: String!
+  whiteWins: Int!
+  blackWins: Int!
+  draws: Int!
+  total: Int!
+}
+
+"""
+What real players do from a position: every move played from it across all
+finished games, most popular first, with the score for each. Transpositions
+collapse together, so different move orders into the same position are counted as
+one.
+"""
+type OpeningExplorer {
+  moves: [OpeningMove!]!
+  totalGames: Int!
+}
+
 type Query {
   "The signed-in account, or null when signed out."
   me: User
@@ -138,6 +160,11 @@ type Query {
   leaderboard(limit: Int): [LeaderboardEntry!]!
   "Fetch a game and its full move list."
   game(id: ID!): Game
+  """
+  The opening explorer for a position (FEN). Omit the FEN for the starting
+  position.
+  """
+  openingExplorer(fen: String, limit: Int): OpeningExplorer!
   """
   A short-lived download URL for a finished game's PGN, or null when the game has
   no archived PGN yet. The client downloads straight from object storage.

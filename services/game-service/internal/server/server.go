@@ -164,6 +164,7 @@ func (s *Server) SubmitMove(ctx context.Context, req *gamev1.SubmitMoveRequest) 
 		s.applyRatings(ctx, g.ID, result)
 		s.requestAnalysis(ctx, g.ID)
 		s.archivePGN(ctx, g.ID)
+		s.ingestOpening(ctx, g.ID, resultToDB(result))
 	}
 
 	// Engine reply, when applicable and the game is still going.
@@ -280,6 +281,7 @@ func (s *Server) Resign(ctx context.Context, req *gamev1.ResignRequest) (*gamev1
 	s.applyRatings(ctx, g.ID, winner)
 	s.requestAnalysis(ctx, g.ID)
 	s.archivePGN(ctx, g.ID)
+	s.ingestOpening(ctx, g.ID, resultToDB(winner))
 
 	updated, moves, err := s.store.GetGame(ctx, g.ID)
 	if err != nil {

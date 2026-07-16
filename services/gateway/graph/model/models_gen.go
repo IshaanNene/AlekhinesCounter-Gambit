@@ -155,6 +155,26 @@ type MoveVerdict struct {
 type Mutation struct {
 }
 
+// What real players do from a position: every move played from it across all
+// finished games, most popular first, with the score for each. Transpositions
+// collapse together, so different move orders into the same position are counted as
+// one.
+type OpeningExplorer struct {
+	Moves      []*OpeningMove `json:"moves"`
+	TotalGames int            `json:"totalGames"`
+}
+
+// One continuation from a position in the opening explorer, and its record.
+type OpeningMove struct {
+	Uci string `json:"uci"`
+	// Human-readable form, e.g. "Nf3".
+	San       string `json:"san"`
+	WhiteWins int    `json:"whiteWins"`
+	BlackWins int    `json:"blackWins"`
+	Draws     int    `json:"draws"`
+	Total     int    `json:"total"`
+}
+
 type Query struct {
 }
 
