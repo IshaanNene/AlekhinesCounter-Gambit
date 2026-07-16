@@ -1,0 +1,75 @@
+# Umbrella values for the whole platform. Each service is templated from the same
+# helpers, so a new replica count or image tag is one line, not a new manifest.
+#
+# Infra dependencies (Postgres, Redis, Kafka, MinIO, Jaeger) are declared as
+# simple single-replica Deployments for a local cluster. In a real environment
+# these would be managed services (RDS, ElastiCache, MSK, S3) wired via
+# Terraform, and these blocks disabled — see infra/terraform.
+
+global:
+  imageRegistry: ""        # e.g. ghcr.io/ishaannene/ — empty for locally-loaded images
+  imagePullPolicy: IfNotPresent
+  otlpEndpoint: "jaeger:4317"
+
+# The application services. Each is rendered by templates/service.yaml.
+services:
+  gateway:
+    image: alekhinescounter-gambit-gateway:latest
+    replicas: 2            # the horizontally-scalable edge; Redis fanout makes this safe
+    port: 8080
+    metricsPort: 9101
+    env:
+      ACG_GATEWAY_ADDR: ":8080"
+      ACG_GAME_ADDR_CLIENT: "game-service:50051"
+      ACG_SESSION_ADDR: "session-manager:50053"
+      ACG_REDIS_ADDR: "redis:6379"
+      ACG_COOKIE_SECURE: "false"
+    envFromSecret: acg-secrets
+    hpa:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 6
+      targetCPUUtilizationPercentage: 70
+
+  game-service:
+    image: alekhinescounter-gambit-game-service:latest
+    replicas: 2
+    port: 50051
+    metricsPort: 9101
+    env:
+      ACG_GAME_ADDR: ":50051"
+      ACG_ENGINE_ADDR: "engine-worker:50052"
+      ACG_SESSION_ADDR: "session-manager:50053"
+      ACG_REDIS_ADDR: "redis:6379"
+      ACG_KAFKA_BROKERS: "kafka:9092"
+      ACG_S3_ENDPOINT: "minio:9000"
+      ACG_RUN_MIGRATIONS: "true"
+
+  engine-worker:
+    image: alekhinescounter-gambit-engine-worker:latest
+    replicas: 3            # stateless and CPU-bound — the thing you scale under load
+    port: 50052
+    hpa:
+      enabled: true
+      minReplicas: 3
+      maxReplicas: 12
+      targetCPUUtilizationPercentage: 80
+
+  analysis-worker:
+    image: alekhinescounter-gambit-analysis-worker:latest
+    replicas: 2            # scales the Kafka consumer group
+    metricsPort: 9101
+
+  session-manager:
+    image: alekhinescounter-gambit-session-manager:latest
+    replicas: 1            # stateful (live games); scaling needs sticky routing, deferred
+    port: 50053
+
+  web:
+    image: alekhinescounter-gambit-web:latest
+    replicas: 2
+    port: 80
+
+# Toggle the bundled infra off when using managed services.
+infra:
+  enabled: true

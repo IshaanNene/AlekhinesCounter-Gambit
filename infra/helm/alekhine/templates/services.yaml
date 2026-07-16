@@ -1,0 +1,112 @@
+{{- /*
+  One template renders every application service: Deployment + Service, plus an
+  HPA when the values ask for one. Adding a service is an entry in values.yaml,
+  not a new file — the whole point of templating.
+*/ -}}
+{{- range $name, $svc := .Values.services }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "acg.labels" (dict "name" $name "root" $) | nindent 4 }}
+spec:
+  replicas: {{ $svc.replicas | default 1 }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ $name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ $name }}
+      {{- if $svc.metricsPort }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ $svc.metricsPort }}"
+      {{- end }}
+    spec:
+      containers:
+        - name: {{ $name }}
+          image: {{ include "acg.image" (dict "registry" $.Values.global.imageRegistry "image" $svc.image) }}
+          imagePullPolicy: {{ $.Values.global.imagePullPolicy }}
+          {{- if or $svc.port $svc.metricsPort }}
+          ports:
+            {{- if $svc.port }}
+            - name: main
+              containerPort: {{ $svc.port }}
+            {{- end }}
+            {{- if $svc.metricsPort }}
+            - name: metrics
+              containerPort: {{ $svc.metricsPort }}
+            {{- end }}
+          {{- end }}
+          env:
+            - name: ACG_OTLP_ENDPOINT
+              value: {{ $.Values.global.otlpEndpoint | quote }}
+            {{- if $svc.metricsPort }}
+            - name: ACG_METRICS_ADDR
+              value: ":{{ $svc.metricsPort }}"
+            {{- end }}
+            {{- range $k, $v := $svc.env }}
+            - name: {{ $k }}
+              value: {{ $v | quote }}
+            {{- end }}
+          {{- if $svc.envFromSecret }}
+          envFrom:
+            - secretRef:
+                name: {{ $svc.envFromSecret }}
+          {{- end }}
+          {{- if $svc.metricsPort }}
+          # The metrics port doubles as the liveness/readiness surface — a
+          # service that cannot serve /healthz should be pulled from rotation.
+          readinessProbe:
+            httpGet: { path: /healthz, port: metrics }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /healthz, port: metrics }
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          {{- end }}
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { cpu: "1", memory: 512Mi }
+{{- if $svc.port }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "acg.labels" (dict "name" $name "root" $) | nindent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/name: {{ $name }}
+  ports:
+    - name: main
+      port: {{ $svc.port }}
+      targetPort: main
+{{- end }}
+{{- if and $svc.hpa $svc.hpa.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ $name }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ $name }}
+  minReplicas: {{ $svc.hpa.minReplicas }}
+  maxReplicas: {{ $svc.hpa.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ $svc.hpa.targetCPUUtilizationPercentage }}
+{{- end }}
+{{- end }}
