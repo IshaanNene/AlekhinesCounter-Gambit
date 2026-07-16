@@ -21,6 +21,9 @@ service GameService {
   rpc ListGames(ListGamesRequest) returns (ListGamesResponse);
   // Leaderboard returns the highest-rated accounts.
   rpc Leaderboard(LeaderboardRequest) returns (LeaderboardResponse);
+  // GetAnalysis returns a finished game's report. NOT_FOUND while the worker
+  // has not analysed it yet — an ordinary state, not an error.
+  rpc GetAnalysis(GetAnalysisRequest) returns (GetAnalysisResponse);
   // LegalMoves lists every legal move in a game's current position. Clients use
   // it to highlight destinations and validate premoves without reimplementing
   // move generation — the rules stay in one place.
@@ -149,6 +152,45 @@ message LegalMovesResponse {
   // Legal moves in UCI notation for the side to move. Empty when the game is
   // over (checkmate or stalemate).
   repeated string uci = 1;
+}
+
+message GetAnalysisRequest {
+  string game_id = 1;
+}
+
+// MoveVerdict is the engine's judgement on one played move.
+message MoveVerdict {
+  uint32 ply = 1;
+  string uci = 2;
+  string best_uci = 3;
+  // Centipawns from the side-to-move's view, mates collapsed onto the scale.
+  int32 eval_before_cp = 4;
+  int32 eval_after_cp = 5;
+  int32 centipawn_loss = 6;
+  string quality = 7;
+  bool matched_engine = 8;
+}
+
+message SideAnalysis {
+  double accuracy = 1;   // 0..100
+  double acpl = 2;
+  double match_rate = 3; // 0..1
+  uint32 blunders = 4;
+  uint32 mistakes = 5;
+  uint32 inaccuracies = 6;
+}
+
+message GetAnalysisResponse {
+  string game_id = 1;
+  uint32 depth = 2;
+  SideAnalysis white = 3;
+  SideAnalysis black = 4;
+  repeated MoveVerdict moves = 5;
+  // First position in the game never previously seen on this platform.
+  string novelty_fen = 6;
+  uint32 novelty_ply = 7;
+  bool has_novelty = 8;
+  google.protobuf.Timestamp analyzed_at = 9;
 }
 
 message ListGamesRequest {

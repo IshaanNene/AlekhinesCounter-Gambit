@@ -128,3 +128,52 @@ func toModelSide(s sessionv1.Side) model.Side {
 	}
 	return model.SideWhite
 }
+
+// toModelAnalysis converts a game report to the GraphQL model.
+func toModelAnalysis(r *gamev1.GetAnalysisResponse) *model.GameAnalysis {
+	if r == nil {
+		return nil
+	}
+	out := &model.GameAnalysis{
+		GameID:     r.GetGameId(),
+		Depth:      int(r.GetDepth()),
+		White:      toModelSideAnalysis(r.GetWhite()),
+		Black:      toModelSideAnalysis(r.GetBlack()),
+		Moves:      make([]*model.MoveVerdict, 0, len(r.GetMoves())),
+		AnalyzedAt: r.GetAnalyzedAt().AsTime(),
+	}
+	// has_novelty distinguishes "no novelty in this game" from an empty string.
+	if r.GetHasNovelty() {
+		fen := r.GetNoveltyFen()
+		ply := int(r.GetNoveltyPly())
+		out.NoveltyFen = &fen
+		out.NoveltyPly = &ply
+	}
+	for _, m := range r.GetMoves() {
+		out.Moves = append(out.Moves, &model.MoveVerdict{
+			Ply:           int(m.GetPly()),
+			Uci:           m.GetUci(),
+			BestUci:       m.GetBestUci(),
+			EvalBeforeCp:  int(m.GetEvalBeforeCp()),
+			EvalAfterCp:   int(m.GetEvalAfterCp()),
+			CentipawnLoss: int(m.GetCentipawnLoss()),
+			Quality:       m.GetQuality(),
+			MatchedEngine: m.GetMatchedEngine(),
+		})
+	}
+	return out
+}
+
+func toModelSideAnalysis(s *gamev1.SideAnalysis) *model.SideAnalysis {
+	if s == nil {
+		return &model.SideAnalysis{}
+	}
+	return &model.SideAnalysis{
+		Accuracy:     s.GetAccuracy(),
+		Acpl:         s.GetAcpl(),
+		MatchRate:    s.GetMatchRate(),
+		Blunders:     int(s.GetBlunders()),
+		Mistakes:     int(s.GetMistakes()),
+		Inaccuracies: int(s.GetInaccuracies()),
+	}
+}

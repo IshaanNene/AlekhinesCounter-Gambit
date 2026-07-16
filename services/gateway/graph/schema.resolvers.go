@@ -283,6 +283,20 @@ func (r *queryResolver) Game(ctx context.Context, id string) (*model.Game, error
 	return toModelGame(resp.GetGame()), nil
 }
 
+// GameAnalysis is the resolver for the gameAnalysis field.
+func (r *queryResolver) GameAnalysis(ctx context.Context, gameID string) (*model.GameAnalysis, error) {
+	resp, err := r.Upstream.Game.GetAnalysis(ctx, &gamev1.GetAnalysisRequest{GameId: gameID})
+	if err != nil {
+		// Not analysed yet is an ordinary state, not a failure: the pipeline is
+		// asynchronous and the client renders this as "analysing…".
+		if status.Code(err) == codes.NotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return toModelAnalysis(resp), nil
+}
+
 // LegalMoves is the resolver for the legalMoves field.
 func (r *queryResolver) LegalMoves(ctx context.Context, gameID string) ([]string, error) {
 	resp, err := r.Upstream.Game.LegalMoves(ctx, &gamev1.LegalMovesRequest{GameId: gameID})

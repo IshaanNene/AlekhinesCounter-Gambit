@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"google.golang.org/grpc/codes"
@@ -11,6 +12,7 @@ import (
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/chess"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/kafkax"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/rating"
+	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/store"
 	analysisv1 "github.com/IshaanNene/AlekhinesCounter-Gambit/proto/gen/go/analysis/v1"
 	gamev1 "github.com/IshaanNene/AlekhinesCounter-Gambit/proto/gen/go/game/v1"
 )
@@ -143,5 +145,60 @@ func (s *Server) applyRatings(ctx context.Context, gameID string, result chess.R
 	}
 	if applied {
 		s.log.Info("ratings applied", "game_id", gameID, "outcome", result)
+	}
+}
+
+// GetAnalysis returns a game's report.
+//
+// NOT_FOUND simply means the worker has not got to it yet: analysis is async, so
+// "no report" is an ordinary state a client should render as "analysing…", not
+// an error.
+func (s *Server) GetAnalysis(ctx context.Context, req *gamev1.GetAnalysisRequest) (*gamev1.GetAnalysisResponse, error) {
+	if req.GetGameId() == "" {
+		return nil, status.Error(codes.InvalidArgument, "game_id is required")
+	}
+	r, err := s.store.GetAnalysis(ctx, req.GetGameId())
+	if errors.Is(err, store.ErrNotFound) {
+		return nil, status.Error(codes.NotFound, "this game has not been analysed yet")
+	}
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "load analysis: %v", err)
+	}
+
+	moves := make([]*gamev1.MoveVerdict, 0, len(r.Moves))
+	for _, m := range r.Moves {
+		moves = append(moves, &gamev1.MoveVerdict{
+			Ply:           uint32(m.Ply),
+			Uci:           m.UCI,
+			BestUci:       m.BestUCI,
+			EvalBeforeCp:  int32(m.EvalBeforeCP),
+			EvalAfterCp:   int32(m.EvalAfterCP),
+			CentipawnLoss: int32(m.CentipawnLoss),
+			Quality:       m.Quality,
+			MatchedEngine: m.MatchedEngine,
+		})
+	}
+
+	return &gamev1.GetAnalysisResponse{
+		GameId:     r.GameID,
+		Depth:      uint32(r.Depth),
+		White:      toSideAnalysis(r.White),
+		Black:      toSideAnalysis(r.Black),
+		Moves:      moves,
+		NoveltyFen: r.NoveltyFEN,
+		NoveltyPly: uint32(r.NoveltyPly),
+		HasNovelty: r.NoveltyFEN != "",
+		AnalyzedAt: timestamppb.New(r.AnalyzedAt),
+	}, nil
+}
+
+func toSideAnalysis(s store.SideReport) *gamev1.SideAnalysis {
+	return &gamev1.SideAnalysis{
+		Accuracy:     s.Accuracy,
+		Acpl:         s.ACPL,
+		MatchRate:    s.MatchRate,
+		Blunders:     uint32(s.Blunders),
+		Mistakes:     uint32(s.Mistakes),
+		Inaccuracies: uint32(s.Inaccuracies),
 	}
 }

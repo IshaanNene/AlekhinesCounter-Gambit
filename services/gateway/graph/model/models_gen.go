@@ -56,6 +56,22 @@ type Game struct {
 	Clock *Clock `json:"clock,omitempty"`
 }
 
+// A finished game's report. Null while the pipeline has not analysed it yet —
+// analysis is asynchronous, so absence means "not yet", not "failed".
+type GameAnalysis struct {
+	GameID string `json:"gameId"`
+	// Search depth the report was produced at.
+	Depth int            `json:"depth"`
+	White *SideAnalysis  `json:"white"`
+	Black *SideAnalysis  `json:"black"`
+	Moves []*MoveVerdict `json:"moves"`
+	// The first position in this game never previously seen on the platform — a
+	// theoretical novelty. Null when every position was already known.
+	NoveltyFen *string   `json:"noveltyFen,omitempty"`
+	NoveltyPly *int      `json:"noveltyPly,omitempty"`
+	AnalyzedAt time.Time `json:"analyzedAt"`
+}
+
 type GameHistory struct {
 	Games []*GameSummary `json:"games"`
 	Total int            `json:"total"`
@@ -119,6 +135,23 @@ type MoveInput struct {
 	Uci string `json:"uci"`
 }
 
+// The engine's verdict on one played move. Produced asynchronously by the analysis
+// pipeline after a game ends.
+type MoveVerdict struct {
+	Ply int    `json:"ply"`
+	Uci string `json:"uci"`
+	// What the engine would have played instead.
+	BestUci string `json:"bestUci"`
+	// Centipawns from the side-to-move's view; mates collapse onto the same scale.
+	EvalBeforeCp int `json:"evalBeforeCp"`
+	EvalAfterCp  int `json:"evalAfterCp"`
+	// What the move cost its mover. Zero when it was the engine's own choice.
+	CentipawnLoss int `json:"centipawnLoss"`
+	// BEST | EXCELLENT | GOOD | INACCURACY | MISTAKE | BLUNDER | BRILLIANT
+	Quality       string `json:"quality"`
+	MatchedEngine bool   `json:"matchedEngine"`
+}
+
 type Mutation struct {
 }
 
@@ -146,6 +179,18 @@ type Session struct {
 	User      *User     `json:"user"`
 	Token     string    `json:"token"`
 	ExpiresAt time.Time `json:"expiresAt"`
+}
+
+type SideAnalysis struct {
+	// 0–100, measured in winning chance surrendered rather than raw centipawns.
+	Accuracy float64 `json:"accuracy"`
+	// Average centipawn loss.
+	Acpl float64 `json:"acpl"`
+	// Fraction of moves matching the engine's first choice, 0–1.
+	MatchRate    float64 `json:"matchRate"`
+	Blunders     int     `json:"blunders"`
+	Mistakes     int     `json:"mistakes"`
+	Inaccuracies int     `json:"inaccuracies"`
 }
 
 type Subscription struct {

@@ -76,6 +76,57 @@ type Game {
   clock: Clock
 }
 
+"""
+The engine's verdict on one played move. Produced asynchronously by the analysis
+pipeline after a game ends.
+"""
+type MoveVerdict {
+  ply: Int!
+  uci: String!
+  "What the engine would have played instead."
+  bestUci: String!
+  "Centipawns from the side-to-move's view; mates collapse onto the same scale."
+  evalBeforeCp: Int!
+  evalAfterCp: Int!
+  "What the move cost its mover. Zero when it was the engine's own choice."
+  centipawnLoss: Int!
+  "BEST | EXCELLENT | GOOD | INACCURACY | MISTAKE | BLUNDER | BRILLIANT"
+  quality: String!
+  matchedEngine: Boolean!
+}
+
+type SideAnalysis {
+  "0–100, measured in winning chance surrendered rather than raw centipawns."
+  accuracy: Float!
+  "Average centipawn loss."
+  acpl: Float!
+  "Fraction of moves matching the engine's first choice, 0–1."
+  matchRate: Float!
+  blunders: Int!
+  mistakes: Int!
+  inaccuracies: Int!
+}
+
+"""
+A finished game's report. Null while the pipeline has not analysed it yet —
+analysis is asynchronous, so absence means "not yet", not "failed".
+"""
+type GameAnalysis {
+  gameId: ID!
+  "Search depth the report was produced at."
+  depth: Int!
+  white: SideAnalysis!
+  black: SideAnalysis!
+  moves: [MoveVerdict!]!
+  """
+  The first position in this game never previously seen on the platform — a
+  theoretical novelty. Null when every position was already known.
+  """
+  noveltyFen: String
+  noveltyPly: Int
+  analyzedAt: Time!
+}
+
 type Query {
   "The signed-in account, or null when signed out."
   me: User
@@ -87,6 +138,11 @@ type Query {
   leaderboard(limit: Int): [LeaderboardEntry!]!
   "Fetch a game and its full move list."
   game(id: ID!): Game
+  """
+  A finished game's engine report. Null while it is still being analysed, so a
+  client should treat absence as "analysing…" rather than an error.
+  """
+  gameAnalysis(gameId: ID!): GameAnalysis
   """
   Every legal move in a game's current position, in UCI notation. Backed by the
   same move generator the server validates with, so clients can highlight

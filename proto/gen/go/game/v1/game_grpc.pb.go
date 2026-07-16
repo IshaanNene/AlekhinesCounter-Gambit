@@ -26,6 +26,7 @@ const (
 	GameService_JoinGame_FullMethodName    = "/alekhine.game.v1.GameService/JoinGame"
 	GameService_ListGames_FullMethodName   = "/alekhine.game.v1.GameService/ListGames"
 	GameService_Leaderboard_FullMethodName = "/alekhine.game.v1.GameService/Leaderboard"
+	GameService_GetAnalysis_FullMethodName = "/alekhine.game.v1.GameService/GetAnalysis"
 	GameService_LegalMoves_FullMethodName  = "/alekhine.game.v1.GameService/LegalMoves"
 )
 
@@ -50,6 +51,9 @@ type GameServiceClient interface {
 	ListGames(ctx context.Context, in *ListGamesRequest, opts ...grpc.CallOption) (*ListGamesResponse, error)
 	// Leaderboard returns the highest-rated accounts.
 	Leaderboard(ctx context.Context, in *LeaderboardRequest, opts ...grpc.CallOption) (*LeaderboardResponse, error)
+	// GetAnalysis returns a finished game's report. NOT_FOUND while the worker
+	// has not analysed it yet — an ordinary state, not an error.
+	GetAnalysis(ctx context.Context, in *GetAnalysisRequest, opts ...grpc.CallOption) (*GetAnalysisResponse, error)
 	// LegalMoves lists every legal move in a game's current position. Clients use
 	// it to highlight destinations and validate premoves without reimplementing
 	// move generation — the rules stay in one place.
@@ -134,6 +138,16 @@ func (c *gameServiceClient) Leaderboard(ctx context.Context, in *LeaderboardRequ
 	return out, nil
 }
 
+func (c *gameServiceClient) GetAnalysis(ctx context.Context, in *GetAnalysisRequest, opts ...grpc.CallOption) (*GetAnalysisResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetAnalysisResponse)
+	err := c.cc.Invoke(ctx, GameService_GetAnalysis_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *gameServiceClient) LegalMoves(ctx context.Context, in *LegalMovesRequest, opts ...grpc.CallOption) (*LegalMovesResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(LegalMovesResponse)
@@ -165,6 +179,9 @@ type GameServiceServer interface {
 	ListGames(context.Context, *ListGamesRequest) (*ListGamesResponse, error)
 	// Leaderboard returns the highest-rated accounts.
 	Leaderboard(context.Context, *LeaderboardRequest) (*LeaderboardResponse, error)
+	// GetAnalysis returns a finished game's report. NOT_FOUND while the worker
+	// has not analysed it yet — an ordinary state, not an error.
+	GetAnalysis(context.Context, *GetAnalysisRequest) (*GetAnalysisResponse, error)
 	// LegalMoves lists every legal move in a game's current position. Clients use
 	// it to highlight destinations and validate premoves without reimplementing
 	// move generation — the rules stay in one place.
@@ -199,6 +216,9 @@ func (UnimplementedGameServiceServer) ListGames(context.Context, *ListGamesReque
 }
 func (UnimplementedGameServiceServer) Leaderboard(context.Context, *LeaderboardRequest) (*LeaderboardResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Leaderboard not implemented")
+}
+func (UnimplementedGameServiceServer) GetAnalysis(context.Context, *GetAnalysisRequest) (*GetAnalysisResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetAnalysis not implemented")
 }
 func (UnimplementedGameServiceServer) LegalMoves(context.Context, *LegalMovesRequest) (*LegalMovesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method LegalMoves not implemented")
@@ -350,6 +370,24 @@ func _GameService_Leaderboard_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _GameService_GetAnalysis_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetAnalysisRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GameServiceServer).GetAnalysis(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: GameService_GetAnalysis_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GameServiceServer).GetAnalysis(ctx, req.(*GetAnalysisRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _GameService_LegalMoves_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(LegalMovesRequest)
 	if err := dec(in); err != nil {
@@ -402,6 +440,10 @@ var GameService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Leaderboard",
 			Handler:    _GameService_Leaderboard_Handler,
+		},
+		{
+			MethodName: "GetAnalysis",
+			Handler:    _GameService_GetAnalysis_Handler,
 		},
 		{
 			MethodName: "LegalMoves",

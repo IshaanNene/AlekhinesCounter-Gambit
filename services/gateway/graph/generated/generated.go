@@ -62,6 +62,17 @@ type ComplexityRoot struct {
 		WhiteID          func(childComplexity int) int
 	}
 
+	GameAnalysis struct {
+		AnalyzedAt func(childComplexity int) int
+		Black      func(childComplexity int) int
+		Depth      func(childComplexity int) int
+		GameID     func(childComplexity int) int
+		Moves      func(childComplexity int) int
+		NoveltyFen func(childComplexity int) int
+		NoveltyPly func(childComplexity int) int
+		White      func(childComplexity int) int
+	}
+
 	GameHistory struct {
 		Games func(childComplexity int) int
 		Total func(childComplexity int) int
@@ -103,6 +114,17 @@ type ComplexityRoot struct {
 		Uci      func(childComplexity int) int
 	}
 
+	MoveVerdict struct {
+		BestUci       func(childComplexity int) int
+		CentipawnLoss func(childComplexity int) int
+		EvalAfterCp   func(childComplexity int) int
+		EvalBeforeCp  func(childComplexity int) int
+		MatchedEngine func(childComplexity int) int
+		Ply           func(childComplexity int) int
+		Quality       func(childComplexity int) int
+		Uci           func(childComplexity int) int
+	}
+
 	Mutation struct {
 		CreateGame        func(childComplexity int, input model.CreateGameInput) int
 		JoinGame          func(childComplexity int, gameID string) int
@@ -117,19 +139,29 @@ type ComplexityRoot struct {
 	}
 
 	Query struct {
-		Game        func(childComplexity int, id string) int
-		GameHistory func(childComplexity int, userID *string, limit *int, offset *int) int
-		Health      func(childComplexity int) int
-		Leaderboard func(childComplexity int, limit *int) int
-		LegalMoves  func(childComplexity int, gameID string) int
-		Me          func(childComplexity int) int
-		User        func(childComplexity int, id string) int
+		Game         func(childComplexity int, id string) int
+		GameAnalysis func(childComplexity int, gameID string) int
+		GameHistory  func(childComplexity int, userID *string, limit *int, offset *int) int
+		Health       func(childComplexity int) int
+		Leaderboard  func(childComplexity int, limit *int) int
+		LegalMoves   func(childComplexity int, gameID string) int
+		Me           func(childComplexity int) int
+		User         func(childComplexity int, id string) int
 	}
 
 	Session struct {
 		ExpiresAt func(childComplexity int) int
 		Token     func(childComplexity int) int
 		User      func(childComplexity int) int
+	}
+
+	SideAnalysis struct {
+		Accuracy     func(childComplexity int) int
+		Acpl         func(childComplexity int) int
+		Blunders     func(childComplexity int) int
+		Inaccuracies func(childComplexity int) int
+		MatchRate    func(childComplexity int) int
+		Mistakes     func(childComplexity int) int
 	}
 
 	Subscription struct {
@@ -172,6 +204,7 @@ type QueryResolver interface {
 	GameHistory(ctx context.Context, userID *string, limit *int, offset *int) (*model.GameHistory, error)
 	Leaderboard(ctx context.Context, limit *int) ([]*model.LeaderboardEntry, error)
 	Game(ctx context.Context, id string) (*model.Game, error)
+	GameAnalysis(ctx context.Context, gameID string) (*model.GameAnalysis, error)
 	LegalMoves(ctx context.Context, gameID string) ([]string, error)
 	Health(ctx context.Context) (string, error)
 }
@@ -300,6 +333,55 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Game.WhiteID(childComplexity), true
+
+	case "GameAnalysis.analyzedAt":
+		if e.ComplexityRoot.GameAnalysis.AnalyzedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.GameAnalysis.AnalyzedAt(childComplexity), true
+	case "GameAnalysis.black":
+		if e.ComplexityRoot.GameAnalysis.Black == nil {
+			break
+		}
+
+		return e.ComplexityRoot.GameAnalysis.Black(childComplexity), true
+	case "GameAnalysis.depth":
+		if e.ComplexityRoot.GameAnalysis.Depth == nil {
+			break
+		}
+
+		return e.ComplexityRoot.GameAnalysis.Depth(childComplexity), true
+	case "GameAnalysis.gameId":
+		if e.ComplexityRoot.GameAnalysis.GameID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.GameAnalysis.GameID(childComplexity), true
+	case "GameAnalysis.moves":
+		if e.ComplexityRoot.GameAnalysis.Moves == nil {
+			break
+		}
+
+		return e.ComplexityRoot.GameAnalysis.Moves(childComplexity), true
+	case "GameAnalysis.noveltyFen":
+		if e.ComplexityRoot.GameAnalysis.NoveltyFen == nil {
+			break
+		}
+
+		return e.ComplexityRoot.GameAnalysis.NoveltyFen(childComplexity), true
+	case "GameAnalysis.noveltyPly":
+		if e.ComplexityRoot.GameAnalysis.NoveltyPly == nil {
+			break
+		}
+
+		return e.ComplexityRoot.GameAnalysis.NoveltyPly(childComplexity), true
+	case "GameAnalysis.white":
+		if e.ComplexityRoot.GameAnalysis.White == nil {
+			break
+		}
+
+		return e.ComplexityRoot.GameAnalysis.White(childComplexity), true
 
 	case "GameHistory.games":
 		if e.ComplexityRoot.GameHistory.Games == nil {
@@ -462,6 +544,55 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.Move.Uci(childComplexity), true
 
+	case "MoveVerdict.bestUci":
+		if e.ComplexityRoot.MoveVerdict.BestUci == nil {
+			break
+		}
+
+		return e.ComplexityRoot.MoveVerdict.BestUci(childComplexity), true
+	case "MoveVerdict.centipawnLoss":
+		if e.ComplexityRoot.MoveVerdict.CentipawnLoss == nil {
+			break
+		}
+
+		return e.ComplexityRoot.MoveVerdict.CentipawnLoss(childComplexity), true
+	case "MoveVerdict.evalAfterCp":
+		if e.ComplexityRoot.MoveVerdict.EvalAfterCp == nil {
+			break
+		}
+
+		return e.ComplexityRoot.MoveVerdict.EvalAfterCp(childComplexity), true
+	case "MoveVerdict.evalBeforeCp":
+		if e.ComplexityRoot.MoveVerdict.EvalBeforeCp == nil {
+			break
+		}
+
+		return e.ComplexityRoot.MoveVerdict.EvalBeforeCp(childComplexity), true
+	case "MoveVerdict.matchedEngine":
+		if e.ComplexityRoot.MoveVerdict.MatchedEngine == nil {
+			break
+		}
+
+		return e.ComplexityRoot.MoveVerdict.MatchedEngine(childComplexity), true
+	case "MoveVerdict.ply":
+		if e.ComplexityRoot.MoveVerdict.Ply == nil {
+			break
+		}
+
+		return e.ComplexityRoot.MoveVerdict.Ply(childComplexity), true
+	case "MoveVerdict.quality":
+		if e.ComplexityRoot.MoveVerdict.Quality == nil {
+			break
+		}
+
+		return e.ComplexityRoot.MoveVerdict.Quality(childComplexity), true
+	case "MoveVerdict.uci":
+		if e.ComplexityRoot.MoveVerdict.Uci == nil {
+			break
+		}
+
+		return e.ComplexityRoot.MoveVerdict.Uci(childComplexity), true
+
 	case "Mutation.createGame":
 		if e.ComplexityRoot.Mutation.CreateGame == nil {
 			break
@@ -574,6 +705,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.Game(childComplexity, args["id"].(string)), true
+	case "Query.gameAnalysis":
+		if e.ComplexityRoot.Query.GameAnalysis == nil {
+			break
+		}
+
+		args, err := ec.field_Query_gameAnalysis_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.GameAnalysis(childComplexity, args["gameId"].(string)), true
 	case "Query.gameHistory":
 		if e.ComplexityRoot.Query.GameHistory == nil {
 			break
@@ -650,6 +792,43 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Session.User(childComplexity), true
+
+	case "SideAnalysis.accuracy":
+		if e.ComplexityRoot.SideAnalysis.Accuracy == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SideAnalysis.Accuracy(childComplexity), true
+	case "SideAnalysis.acpl":
+		if e.ComplexityRoot.SideAnalysis.Acpl == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SideAnalysis.Acpl(childComplexity), true
+	case "SideAnalysis.blunders":
+		if e.ComplexityRoot.SideAnalysis.Blunders == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SideAnalysis.Blunders(childComplexity), true
+	case "SideAnalysis.inaccuracies":
+		if e.ComplexityRoot.SideAnalysis.Inaccuracies == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SideAnalysis.Inaccuracies(childComplexity), true
+	case "SideAnalysis.matchRate":
+		if e.ComplexityRoot.SideAnalysis.MatchRate == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SideAnalysis.MatchRate(childComplexity), true
+	case "SideAnalysis.mistakes":
+		if e.ComplexityRoot.SideAnalysis.Mistakes == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SideAnalysis.Mistakes(childComplexity), true
 
 	case "Subscription.gameUpdated":
 		if e.ComplexityRoot.Subscription.GameUpdated == nil {
@@ -889,6 +1068,57 @@ type Game {
   clock: Clock
 }
 
+"""
+The engine's verdict on one played move. Produced asynchronously by the analysis
+pipeline after a game ends.
+"""
+type MoveVerdict {
+  ply: Int!
+  uci: String!
+  "What the engine would have played instead."
+  bestUci: String!
+  "Centipawns from the side-to-move's view; mates collapse onto the same scale."
+  evalBeforeCp: Int!
+  evalAfterCp: Int!
+  "What the move cost its mover. Zero when it was the engine's own choice."
+  centipawnLoss: Int!
+  "BEST | EXCELLENT | GOOD | INACCURACY | MISTAKE | BLUNDER | BRILLIANT"
+  quality: String!
+  matchedEngine: Boolean!
+}
+
+type SideAnalysis {
+  "0–100, measured in winning chance surrendered rather than raw centipawns."
+  accuracy: Float!
+  "Average centipawn loss."
+  acpl: Float!
+  "Fraction of moves matching the engine's first choice, 0–1."
+  matchRate: Float!
+  blunders: Int!
+  mistakes: Int!
+  inaccuracies: Int!
+}
+
+"""
+A finished game's report. Null while the pipeline has not analysed it yet —
+analysis is asynchronous, so absence means "not yet", not "failed".
+"""
+type GameAnalysis {
+  gameId: ID!
+  "Search depth the report was produced at."
+  depth: Int!
+  white: SideAnalysis!
+  black: SideAnalysis!
+  moves: [MoveVerdict!]!
+  """
+  The first position in this game never previously seen on the platform — a
+  theoretical novelty. Null when every position was already known.
+  """
+  noveltyFen: String
+  noveltyPly: Int
+  analyzedAt: Time!
+}
+
 type Query {
   "The signed-in account, or null when signed out."
   me: User
@@ -900,6 +1130,11 @@ type Query {
   leaderboard(limit: Int): [LeaderboardEntry!]!
   "Fetch a game and its full move list."
   game(id: ID!): Game
+  """
+  A finished game's engine report. Null while it is still being analysed, so a
+  client should treat absence as "analysing…" rather than an error.
+  """
+  gameAnalysis(gameId: ID!): GameAnalysis
   """
   Every legal move in a game's current position, in UCI notation. Backed by the
   same move generator the server validates with, so clients can highlight
@@ -1106,6 +1341,28 @@ func (ec *executionContext) childFields_Game(ctx context.Context, field graphql.
 	return nil, fmt.Errorf("no field named %q was found under type Game", field.Name)
 }
 
+func (ec *executionContext) childFields_GameAnalysis(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "gameId":
+		return ec.fieldContext_GameAnalysis_gameId(ctx, field)
+	case "depth":
+		return ec.fieldContext_GameAnalysis_depth(ctx, field)
+	case "white":
+		return ec.fieldContext_GameAnalysis_white(ctx, field)
+	case "black":
+		return ec.fieldContext_GameAnalysis_black(ctx, field)
+	case "moves":
+		return ec.fieldContext_GameAnalysis_moves(ctx, field)
+	case "noveltyFen":
+		return ec.fieldContext_GameAnalysis_noveltyFen(ctx, field)
+	case "noveltyPly":
+		return ec.fieldContext_GameAnalysis_noveltyPly(ctx, field)
+	case "analyzedAt":
+		return ec.fieldContext_GameAnalysis_analyzedAt(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type GameAnalysis", field.Name)
+}
+
 func (ec *executionContext) childFields_GameHistory(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 	switch field.Name {
 	case "games":
@@ -1188,6 +1445,28 @@ func (ec *executionContext) childFields_Move(ctx context.Context, field graphql.
 	return nil, fmt.Errorf("no field named %q was found under type Move", field.Name)
 }
 
+func (ec *executionContext) childFields_MoveVerdict(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "ply":
+		return ec.fieldContext_MoveVerdict_ply(ctx, field)
+	case "uci":
+		return ec.fieldContext_MoveVerdict_uci(ctx, field)
+	case "bestUci":
+		return ec.fieldContext_MoveVerdict_bestUci(ctx, field)
+	case "evalBeforeCp":
+		return ec.fieldContext_MoveVerdict_evalBeforeCp(ctx, field)
+	case "evalAfterCp":
+		return ec.fieldContext_MoveVerdict_evalAfterCp(ctx, field)
+	case "centipawnLoss":
+		return ec.fieldContext_MoveVerdict_centipawnLoss(ctx, field)
+	case "quality":
+		return ec.fieldContext_MoveVerdict_quality(ctx, field)
+	case "matchedEngine":
+		return ec.fieldContext_MoveVerdict_matchedEngine(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type MoveVerdict", field.Name)
+}
+
 func (ec *executionContext) childFields_Session(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 	switch field.Name {
 	case "user":
@@ -1198,6 +1477,24 @@ func (ec *executionContext) childFields_Session(ctx context.Context, field graph
 		return ec.fieldContext_Session_expiresAt(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type Session", field.Name)
+}
+
+func (ec *executionContext) childFields_SideAnalysis(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "accuracy":
+		return ec.fieldContext_SideAnalysis_accuracy(ctx, field)
+	case "acpl":
+		return ec.fieldContext_SideAnalysis_acpl(ctx, field)
+	case "matchRate":
+		return ec.fieldContext_SideAnalysis_matchRate(ctx, field)
+	case "blunders":
+		return ec.fieldContext_SideAnalysis_blunders(ctx, field)
+	case "mistakes":
+		return ec.fieldContext_SideAnalysis_mistakes(ctx, field)
+	case "inaccuracies":
+		return ec.fieldContext_SideAnalysis_inaccuracies(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type SideAnalysis", field.Name)
 }
 
 func (ec *executionContext) childFields_User(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
@@ -1459,6 +1756,20 @@ func (ec *executionContext) field_Query___type_args(ctx context.Context, rawArgs
 		return nil, err
 	}
 	args["name"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_gameAnalysis_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "gameId",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNID2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["gameId"] = arg0
 	return args, nil
 }
 
@@ -2029,6 +2340,217 @@ func (ec *executionContext) fieldContext_Game_clock(_ context.Context, field gra
 		},
 	}
 	return fc, nil
+}
+
+func (ec *executionContext) _GameAnalysis_gameId(ctx context.Context, field graphql.CollectedField, obj *model.GameAnalysis) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_GameAnalysis_gameId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.GameID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNID2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_GameAnalysis_gameId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("GameAnalysis", field, false, false, errors.New("field of type ID does not have child fields"))
+}
+
+func (ec *executionContext) _GameAnalysis_depth(ctx context.Context, field graphql.CollectedField, obj *model.GameAnalysis) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_GameAnalysis_depth(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Depth, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v int) graphql.Marshaler {
+			return ec.marshalNInt2int(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_GameAnalysis_depth(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("GameAnalysis", field, false, false, errors.New("field of type Int does not have child fields"))
+}
+
+func (ec *executionContext) _GameAnalysis_white(ctx context.Context, field graphql.CollectedField, obj *model.GameAnalysis) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_GameAnalysis_white(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.White, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.SideAnalysis) graphql.Marshaler {
+			return ec.marshalNSideAnalysis2ᚖgithubᚗcomᚋIshaanNeneᚋAlekhinesCounterᚑGambitᚋservicesᚋgatewayᚋgraphᚋmodelᚐSideAnalysis(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_GameAnalysis_white(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "GameAnalysis",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_SideAnalysis(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _GameAnalysis_black(ctx context.Context, field graphql.CollectedField, obj *model.GameAnalysis) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_GameAnalysis_black(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Black, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.SideAnalysis) graphql.Marshaler {
+			return ec.marshalNSideAnalysis2ᚖgithubᚗcomᚋIshaanNeneᚋAlekhinesCounterᚑGambitᚋservicesᚋgatewayᚋgraphᚋmodelᚐSideAnalysis(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_GameAnalysis_black(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "GameAnalysis",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_SideAnalysis(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _GameAnalysis_moves(ctx context.Context, field graphql.CollectedField, obj *model.GameAnalysis) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_GameAnalysis_moves(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Moves, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []*model.MoveVerdict) graphql.Marshaler {
+			return ec.marshalNMoveVerdict2ᚕᚖgithubᚗcomᚋIshaanNeneᚋAlekhinesCounterᚑGambitᚋservicesᚋgatewayᚋgraphᚋmodelᚐMoveVerdictᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_GameAnalysis_moves(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "GameAnalysis",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_MoveVerdict(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _GameAnalysis_noveltyFen(ctx context.Context, field graphql.CollectedField, obj *model.GameAnalysis) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_GameAnalysis_noveltyFen(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.NoveltyFen, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_GameAnalysis_noveltyFen(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("GameAnalysis", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _GameAnalysis_noveltyPly(ctx context.Context, field graphql.CollectedField, obj *model.GameAnalysis) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_GameAnalysis_noveltyPly(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.NoveltyPly, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *int) graphql.Marshaler {
+			return ec.marshalOInt2ᚖint(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_GameAnalysis_noveltyPly(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("GameAnalysis", field, false, false, errors.New("field of type Int does not have child fields"))
+}
+
+func (ec *executionContext) _GameAnalysis_analyzedAt(ctx context.Context, field graphql.CollectedField, obj *model.GameAnalysis) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_GameAnalysis_analyzedAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.AnalyzedAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v time.Time) graphql.Marshaler {
+			return ec.marshalNTime2timeᚐTime(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_GameAnalysis_analyzedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("GameAnalysis", field, false, false, errors.New("field of type Time does not have child fields"))
 }
 
 func (ec *executionContext) _GameHistory_games(ctx context.Context, field graphql.CollectedField, obj *model.GameHistory) (ret graphql.Marshaler) {
@@ -2636,6 +3158,190 @@ func (ec *executionContext) _Move_fenAfter(ctx context.Context, field graphql.Co
 }
 func (ec *executionContext) fieldContext_Move_fenAfter(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("Move", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _MoveVerdict_ply(ctx context.Context, field graphql.CollectedField, obj *model.MoveVerdict) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_MoveVerdict_ply(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Ply, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v int) graphql.Marshaler {
+			return ec.marshalNInt2int(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_MoveVerdict_ply(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("MoveVerdict", field, false, false, errors.New("field of type Int does not have child fields"))
+}
+
+func (ec *executionContext) _MoveVerdict_uci(ctx context.Context, field graphql.CollectedField, obj *model.MoveVerdict) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_MoveVerdict_uci(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Uci, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_MoveVerdict_uci(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("MoveVerdict", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _MoveVerdict_bestUci(ctx context.Context, field graphql.CollectedField, obj *model.MoveVerdict) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_MoveVerdict_bestUci(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.BestUci, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_MoveVerdict_bestUci(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("MoveVerdict", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _MoveVerdict_evalBeforeCp(ctx context.Context, field graphql.CollectedField, obj *model.MoveVerdict) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_MoveVerdict_evalBeforeCp(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.EvalBeforeCp, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v int) graphql.Marshaler {
+			return ec.marshalNInt2int(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_MoveVerdict_evalBeforeCp(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("MoveVerdict", field, false, false, errors.New("field of type Int does not have child fields"))
+}
+
+func (ec *executionContext) _MoveVerdict_evalAfterCp(ctx context.Context, field graphql.CollectedField, obj *model.MoveVerdict) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_MoveVerdict_evalAfterCp(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.EvalAfterCp, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v int) graphql.Marshaler {
+			return ec.marshalNInt2int(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_MoveVerdict_evalAfterCp(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("MoveVerdict", field, false, false, errors.New("field of type Int does not have child fields"))
+}
+
+func (ec *executionContext) _MoveVerdict_centipawnLoss(ctx context.Context, field graphql.CollectedField, obj *model.MoveVerdict) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_MoveVerdict_centipawnLoss(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.CentipawnLoss, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v int) graphql.Marshaler {
+			return ec.marshalNInt2int(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_MoveVerdict_centipawnLoss(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("MoveVerdict", field, false, false, errors.New("field of type Int does not have child fields"))
+}
+
+func (ec *executionContext) _MoveVerdict_quality(ctx context.Context, field graphql.CollectedField, obj *model.MoveVerdict) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_MoveVerdict_quality(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Quality, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_MoveVerdict_quality(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("MoveVerdict", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _MoveVerdict_matchedEngine(ctx context.Context, field graphql.CollectedField, obj *model.MoveVerdict) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_MoveVerdict_matchedEngine(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.MatchedEngine, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_MoveVerdict_matchedEngine(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("MoveVerdict", field, false, false, errors.New("field of type Boolean does not have child fields"))
 }
 
 func (ec *executionContext) _Mutation_loginAsGuest(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
@@ -3253,6 +3959,50 @@ func (ec *executionContext) fieldContext_Query_game(ctx context.Context, field g
 	return fc, nil
 }
 
+func (ec *executionContext) _Query_gameAnalysis(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Query_gameAnalysis(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().GameAnalysis(ctx, fc.Args["gameId"].(string))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.GameAnalysis) graphql.Marshaler {
+			return ec.marshalOGameAnalysis2ᚖgithubᚗcomᚋIshaanNeneᚋAlekhinesCounterᚑGambitᚋservicesᚋgatewayᚋgraphᚋmodelᚐGameAnalysis(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_Query_gameAnalysis(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_GameAnalysis(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_gameAnalysis_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Query_legalMoves(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -3472,6 +4222,144 @@ func (ec *executionContext) _Session_expiresAt(ctx context.Context, field graphq
 }
 func (ec *executionContext) fieldContext_Session_expiresAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("Session", field, false, false, errors.New("field of type Time does not have child fields"))
+}
+
+func (ec *executionContext) _SideAnalysis_accuracy(ctx context.Context, field graphql.CollectedField, obj *model.SideAnalysis) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SideAnalysis_accuracy(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Accuracy, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v float64) graphql.Marshaler {
+			return ec.marshalNFloat2float64(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SideAnalysis_accuracy(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SideAnalysis", field, false, false, errors.New("field of type Float does not have child fields"))
+}
+
+func (ec *executionContext) _SideAnalysis_acpl(ctx context.Context, field graphql.CollectedField, obj *model.SideAnalysis) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SideAnalysis_acpl(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Acpl, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v float64) graphql.Marshaler {
+			return ec.marshalNFloat2float64(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SideAnalysis_acpl(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SideAnalysis", field, false, false, errors.New("field of type Float does not have child fields"))
+}
+
+func (ec *executionContext) _SideAnalysis_matchRate(ctx context.Context, field graphql.CollectedField, obj *model.SideAnalysis) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SideAnalysis_matchRate(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.MatchRate, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v float64) graphql.Marshaler {
+			return ec.marshalNFloat2float64(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SideAnalysis_matchRate(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SideAnalysis", field, false, false, errors.New("field of type Float does not have child fields"))
+}
+
+func (ec *executionContext) _SideAnalysis_blunders(ctx context.Context, field graphql.CollectedField, obj *model.SideAnalysis) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SideAnalysis_blunders(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Blunders, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v int) graphql.Marshaler {
+			return ec.marshalNInt2int(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SideAnalysis_blunders(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SideAnalysis", field, false, false, errors.New("field of type Int does not have child fields"))
+}
+
+func (ec *executionContext) _SideAnalysis_mistakes(ctx context.Context, field graphql.CollectedField, obj *model.SideAnalysis) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SideAnalysis_mistakes(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Mistakes, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v int) graphql.Marshaler {
+			return ec.marshalNInt2int(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SideAnalysis_mistakes(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SideAnalysis", field, false, false, errors.New("field of type Int does not have child fields"))
+}
+
+func (ec *executionContext) _SideAnalysis_inaccuracies(ctx context.Context, field graphql.CollectedField, obj *model.SideAnalysis) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SideAnalysis_inaccuracies(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Inaccuracies, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v int) graphql.Marshaler {
+			return ec.marshalNInt2int(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SideAnalysis_inaccuracies(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SideAnalysis", field, false, false, errors.New("field of type Int does not have child fields"))
 }
 
 func (ec *executionContext) _Subscription_gameUpdated(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
@@ -5150,6 +6038,79 @@ func (ec *executionContext) _Game(ctx context.Context, sel ast.SelectionSet, obj
 	return out
 }
 
+var gameAnalysisImplementors = []string{"GameAnalysis"}
+
+func (ec *executionContext) _GameAnalysis(ctx context.Context, sel ast.SelectionSet, obj *model.GameAnalysis) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, gameAnalysisImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferredFieldSet := graphql.NewFieldSet(nil)
+	deferLabelToView := make(map[string]*graphql.FieldSetView)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("GameAnalysis")
+		case "gameId":
+			out.Values[i] = ec._GameAnalysis_gameId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "depth":
+			out.Values[i] = ec._GameAnalysis_depth(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "white":
+			out.Values[i] = ec._GameAnalysis_white(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "black":
+			out.Values[i] = ec._GameAnalysis_black(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "moves":
+			out.Values[i] = ec._GameAnalysis_moves(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "noveltyFen":
+			out.Values[i] = ec._GameAnalysis_noveltyFen(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "noveltyPly":
+			out.Values[i] = ec._GameAnalysis_noveltyPly(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "analyzedAt":
+			out.Values[i] = ec._GameAnalysis_analyzedAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferLabelToView), math.MaxInt32)))
+
+	ec.ProcessDeferredGroup(graphql.DeferredGroup{
+		Defers:   deferLabelToView,
+		Path:     graphql.GetPath(ctx),
+		FieldSet: deferredFieldSet,
+		Context:  ctx,
+	})
+
+	return out
+}
+
 var gameHistoryImplementors = []string{"GameHistory"}
 
 func (ec *executionContext) _GameHistory(ctx context.Context, sel ast.SelectionSet, obj *model.GameHistory) graphql.Marshaler {
@@ -5445,6 +6406,79 @@ func (ec *executionContext) _Move(ctx context.Context, sel ast.SelectionSet, obj
 	return out
 }
 
+var moveVerdictImplementors = []string{"MoveVerdict"}
+
+func (ec *executionContext) _MoveVerdict(ctx context.Context, sel ast.SelectionSet, obj *model.MoveVerdict) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, moveVerdictImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferredFieldSet := graphql.NewFieldSet(nil)
+	deferLabelToView := make(map[string]*graphql.FieldSetView)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("MoveVerdict")
+		case "ply":
+			out.Values[i] = ec._MoveVerdict_ply(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "uci":
+			out.Values[i] = ec._MoveVerdict_uci(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "bestUci":
+			out.Values[i] = ec._MoveVerdict_bestUci(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "evalBeforeCp":
+			out.Values[i] = ec._MoveVerdict_evalBeforeCp(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "evalAfterCp":
+			out.Values[i] = ec._MoveVerdict_evalAfterCp(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "centipawnLoss":
+			out.Values[i] = ec._MoveVerdict_centipawnLoss(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "quality":
+			out.Values[i] = ec._MoveVerdict_quality(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "matchedEngine":
+			out.Values[i] = ec._MoveVerdict_matchedEngine(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferLabelToView), math.MaxInt32)))
+
+	ec.ProcessDeferredGroup(graphql.DeferredGroup{
+		Defers:   deferLabelToView,
+		Path:     graphql.GetPath(ctx),
+		FieldSet: deferredFieldSet,
+		Context:  ctx,
+	})
+
+	return out
+}
+
 var mutationImplementors = []string{"Mutation"}
 
 func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet) graphql.Marshaler {
@@ -5686,6 +6720,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "gameAnalysis":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_gameAnalysis(ctx, field)
+				if res == graphql.RequiredNull {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "legalMoves":
 			field := field
 
@@ -5789,6 +6845,69 @@ func (ec *executionContext) _Session(ctx context.Context, sel ast.SelectionSet, 
 			}
 		case "expiresAt":
 			out.Values[i] = ec._Session_expiresAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferLabelToView), math.MaxInt32)))
+
+	ec.ProcessDeferredGroup(graphql.DeferredGroup{
+		Defers:   deferLabelToView,
+		Path:     graphql.GetPath(ctx),
+		FieldSet: deferredFieldSet,
+		Context:  ctx,
+	})
+
+	return out
+}
+
+var sideAnalysisImplementors = []string{"SideAnalysis"}
+
+func (ec *executionContext) _SideAnalysis(ctx context.Context, sel ast.SelectionSet, obj *model.SideAnalysis) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, sideAnalysisImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferredFieldSet := graphql.NewFieldSet(nil)
+	deferLabelToView := make(map[string]*graphql.FieldSetView)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("SideAnalysis")
+		case "accuracy":
+			out.Values[i] = ec._SideAnalysis_accuracy(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "acpl":
+			out.Values[i] = ec._SideAnalysis_acpl(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "matchRate":
+			out.Values[i] = ec._SideAnalysis_matchRate(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "blunders":
+			out.Values[i] = ec._SideAnalysis_blunders(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "mistakes":
+			out.Values[i] = ec._SideAnalysis_mistakes(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "inaccuracies":
+			out.Values[i] = ec._SideAnalysis_inaccuracies(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -6314,6 +7433,22 @@ func (ec *executionContext) unmarshalNCreateGameInput2githubᚗcomᚋIshaanNene�
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
+func (ec *executionContext) unmarshalNFloat2float64(ctx context.Context, v any) (float64, error) {
+	res, err := graphql.UnmarshalFloatContext(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNFloat2float64(ctx context.Context, sel ast.SelectionSet, v float64) graphql.Marshaler {
+	_ = sel
+	res := graphql.MarshalFloatContext(v)
+	if res == graphql.Null {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+	}
+	return graphql.WrapContextMarshaler(ctx, res)
+}
+
 func (ec *executionContext) marshalNGame2githubᚗcomᚋIshaanNeneᚋAlekhinesCounterᚑGambitᚋservicesᚋgatewayᚋgraphᚋmodelᚐGame(ctx context.Context, sel ast.SelectionSet, v model.Game) graphql.Marshaler {
 	return ec._Game(ctx, sel, &v)
 }
@@ -6486,6 +7621,32 @@ func (ec *executionContext) unmarshalNMoveInput2githubᚗcomᚋIshaanNeneᚋAlek
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
+func (ec *executionContext) marshalNMoveVerdict2ᚕᚖgithubᚗcomᚋIshaanNeneᚋAlekhinesCounterᚑGambitᚋservicesᚋgatewayᚋgraphᚋmodelᚐMoveVerdictᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.MoveVerdict) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNMoveVerdict2ᚖgithubᚗcomᚋIshaanNeneᚋAlekhinesCounterᚑGambitᚋservicesᚋgatewayᚋgraphᚋmodelᚐMoveVerdict(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNMoveVerdict2ᚖgithubᚗcomᚋIshaanNeneᚋAlekhinesCounterᚑGambitᚋservicesᚋgatewayᚋgraphᚋmodelᚐMoveVerdict(ctx context.Context, sel ast.SelectionSet, v *model.MoveVerdict) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._MoveVerdict(ctx, sel, v)
+}
+
 func (ec *executionContext) unmarshalNRegisterInput2githubᚗcomᚋIshaanNeneᚋAlekhinesCounterᚑGambitᚋservicesᚋgatewayᚋgraphᚋmodelᚐRegisterInput(ctx context.Context, v any) (model.RegisterInput, error) {
 	res, err := ec.unmarshalInputRegisterInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -6518,6 +7679,16 @@ func (ec *executionContext) unmarshalNSide2githubᚗcomᚋIshaanNeneᚋAlekhines
 
 func (ec *executionContext) marshalNSide2githubᚗcomᚋIshaanNeneᚋAlekhinesCounterᚑGambitᚋservicesᚋgatewayᚋgraphᚋmodelᚐSide(ctx context.Context, sel ast.SelectionSet, v model.Side) graphql.Marshaler {
 	return v
+}
+
+func (ec *executionContext) marshalNSideAnalysis2ᚖgithubᚗcomᚋIshaanNeneᚋAlekhinesCounterᚑGambitᚋservicesᚋgatewayᚋgraphᚋmodelᚐSideAnalysis(ctx context.Context, sel ast.SelectionSet, v *model.SideAnalysis) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._SideAnalysis(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalNString2string(ctx context.Context, v any) (string, error) {
@@ -6789,6 +7960,13 @@ func (ec *executionContext) marshalOGame2ᚖgithubᚗcomᚋIshaanNeneᚋAlekhine
 		return graphql.Null
 	}
 	return ec._Game(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalOGameAnalysis2ᚖgithubᚗcomᚋIshaanNeneᚋAlekhinesCounterᚑGambitᚋservicesᚋgatewayᚋgraphᚋmodelᚐGameAnalysis(ctx context.Context, sel ast.SelectionSet, v *model.GameAnalysis) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._GameAnalysis(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalOID2ᚖstring(ctx context.Context, v any) (*string, error) {
