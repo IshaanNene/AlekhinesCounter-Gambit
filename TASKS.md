@@ -323,7 +323,7 @@ outcomes — expand each into T-level subtasks when you start the epic.
 **Acceptance:** two gateway replicas both deliver updates to their clients; repeated position served from cache (observable via a cache-hit metric/log).
 **Commit:** `feat(redis): fanout, eval cache, rate limiting, sessions`
 
-### [ ] T2.8 — Matchmaking + auth
+### [x] T2.8 — Matchmaking + auth
 **Depends on:** T2.5, T2.7
 **Context:** Rating-banded queue, pair→create game→hand to session-manager; bot fallback. JWT auth on gateway.
 **Acceptance:** two queued users get paired into a live game; solo user gets a bot.
@@ -445,6 +445,6 @@ observable in Grafana + Jaeger, load-tested with autoscaling — reproducible fr
 
 ## Progress tracker
 - Q1: ☑ T1.1 ☑ T1.2 ☑ T1.3 ☑ T1.4 ☑ T1.5 ☑ T1.6 ☑ T1.7 ☑ T1.8 ☑ T1.9
-- Q2: ☑ T2.1 ☑ T2.2 ☑ T2.3 ☑ T2.4 ☑ T2.5 ☑ T2.6 ☑ T2.7 ☐ T2.8
+- Q2: ☑ T2.1 ☑ T2.2 ☑ T2.3 ☑ T2.4 ☑ T2.5 ☑ T2.6 ☑ T2.7 ☑ T2.8  ← Q2 complete
 - Q3: ☐ T3.1 ☐ T3.2 ☐ T3.3 ☐ T3.4 ☐ T3.5 ☐ T3.6
 - Q4: ☐ T4.1 ☐ T4.2 ☐ T4.3 ☐ T4.4 ☐ T4.5 ☐ T4.6 ☐ T4.7 ☐ T4.8 ☐ T4.9 ☐ T4.10

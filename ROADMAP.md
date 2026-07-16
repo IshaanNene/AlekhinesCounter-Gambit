@@ -155,7 +155,7 @@ boards in real time; a spectator can watch; disconnect/reconnect is handled.
 ### Epic 2.5 — Matchmaking
 - [x] Open seats: create a game, share the link, opponent joins as themselves
 - [x] Elo ratings applied on completion (+ history and leaderboard)
-- [ ] Automatic queue pairing by rating band (T2.8 remainder)
+- [x] Automatic queue pairing by rating band (Redis ZSET + Lua, band widens with wait)
 - [ ] Bot fallback (play vs engine if no human found)
 
 **Exit criteria:** live human-vs-human game across two browsers, spectators,
