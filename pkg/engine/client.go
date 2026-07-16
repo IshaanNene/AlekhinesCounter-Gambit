@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
@@ -25,7 +26,8 @@ type Client struct {
 // Dial connects to the engine-worker at addr. cache may be nil or disabled, in
 // which case every request goes to the engine.
 func Dial(addr string, cache *redisx.EvalCache, log *slog.Logger) (*Client, error) {
-	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler()))
 	if err != nil {
 		return nil, fmt.Errorf("dial engine %q: %w", addr, err)
 	}
