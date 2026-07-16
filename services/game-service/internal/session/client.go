@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
@@ -32,7 +33,8 @@ func Dial(addr string, log *slog.Logger) (*Client, error) {
 	if addr == "" {
 		return &Client{log: log}, nil
 	}
-	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler()))
 	if err != nil {
 		return nil, fmt.Errorf("dial session-manager %q: %w", addr, err)
 	}

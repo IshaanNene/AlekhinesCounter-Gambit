@@ -127,6 +127,8 @@ services:
       ACG_S3_SECRET_KEY: "acg-secret-key"
       ACG_S3_PUBLIC_ENDPOINT: "localhost:9000"
       ACG_RUN_MIGRATIONS: "true"
+      ACG_OTLP_ENDPOINT: "jaeger:4317"
+      ACG_METRICS_ADDR: ":9101"
     ports:
       - "50051:50051"
     depends_on:
@@ -157,6 +159,8 @@ services:
       ACG_S3_ENDPOINT: "minio:9000"
       ACG_S3_ACCESS_KEY: "acg"
       ACG_S3_SECRET_KEY: "acg-secret-key"
+      ACG_OTLP_ENDPOINT: "jaeger:4317"
+      ACG_METRICS_ADDR: ":9101"
     depends_on:
       postgres:
         condition: service_healthy
@@ -184,6 +188,8 @@ services:
       ACG_SESSION_SECRET: "dev-only-secret-change-me-in-production-32b"
       ACG_COOKIE_SECURE: "false"
       ACG_REDIS_ADDR: "redis:6379"
+      ACG_OTLP_ENDPOINT: "jaeger:4317"
+      ACG_METRICS_ADDR: ":9101"
     ports:
       - "8080:8080"
     depends_on:
@@ -203,6 +209,45 @@ services:
     depends_on:
       gateway:
         condition: service_started
+
+  # ── Observability ────────────────────────────────────────────────────────
+  # Jaeger receives OTLP traces directly (no separate collector needed locally).
+  jaeger:
+    image: jaegertracing/all-in-one:1.62.0
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686" # UI
+      - "4317:4317"   # OTLP/gRPC
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:16686/"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+    volumes:
+      - ./infra/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infra/observability/alerts.yml:/etc/prometheus/alerts.yml:ro
+    ports:
+      - "9090:9090"
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
+      GF_SECURITY_ADMIN_PASSWORD: "acg"
+    volumes:
+      - ./infra/observability/grafana-datasources.yml:/etc/grafana/provisioning/datasources/ds.yml:ro
+    ports:
+      - "3001:3000"
+    depends_on:
+      - prometheus
+      - jaeger
 
 volumes:
   pgdata:

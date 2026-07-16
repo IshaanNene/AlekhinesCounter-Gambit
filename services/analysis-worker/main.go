@@ -22,6 +22,7 @@ import (
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/kafkax"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/redisx"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/store"
+	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/telemetry"
 	analysisv1 "github.com/IshaanNene/AlekhinesCounter-Gambit/proto/gen/go/analysis/v1"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/services/analysis-worker/internal/worker"
 )
@@ -36,6 +37,16 @@ func main() {
 	log := config.NewLogger()
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+
+	metrics := telemetry.NewMetrics("analysis-worker")
+	tracingShutdown, terr := telemetry.InitTracing(ctx, "analysis-worker", version, config.Getenv("ACG_OTLP_ENDPOINT", ""))
+	if terr != nil {
+		log.Warn("tracing init failed; continuing without it", "error", terr)
+	}
+	defer func() { _ = tracingShutdown(context.Background()) }()
+	metricsShutdown := telemetry.ServeMetrics(config.Getenv("ACG_METRICS_ADDR", ":9101"), metrics, log)
+	defer func() { _ = metricsShutdown(context.Background()) }()
+	_ = metrics
 
 	brokers := config.Getenv("ACG_KAFKA_BROKERS", "")
 	if brokers == "" {

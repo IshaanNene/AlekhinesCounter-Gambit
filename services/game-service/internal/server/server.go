@@ -18,6 +18,7 @@ import (
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/kafkax"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/objstore"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/store"
+	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/telemetry"
 	gamev1 "github.com/IshaanNene/AlekhinesCounter-Gambit/proto/gen/go/game/v1"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/services/game-service/internal/session"
 )
@@ -40,18 +41,32 @@ type Server struct {
 	// objects archives finished PGNs. May be disabled.
 	objects       *objstore.Store
 	analysisDepth int
+	metrics       *telemetry.Metrics
 	log           *slog.Logger
 }
 
 // New builds a Server. sess and events may be disabled clients, in which case
 // live sessions and background analysis are skipped respectively.
-func New(st *store.Store, eng *engine.Client, sess *session.Client, events *kafkax.Producer, objects *objstore.Store, analysisDepth int, log *slog.Logger) *Server {
+func New(st *store.Store, eng *engine.Client, sess *session.Client, events *kafkax.Producer, objects *objstore.Store, analysisDepth int, metrics *telemetry.Metrics, log *slog.Logger) *Server {
 	if analysisDepth <= 0 {
 		analysisDepth = 14
 	}
 	return &Server{
 		store: st, engine: eng, session: sess,
-		events: events, objects: objects, analysisDepth: analysisDepth, log: log,
+		events: events, objects: objects, analysisDepth: analysisDepth,
+		metrics: metrics, log: log,
+	}
+}
+
+// recordMove feeds the move / finished-game gauges. Nil-safe so the server runs
+// without metrics.
+func (s *Server) recordMove(ended bool, result chess.Result) {
+	if s.metrics == nil {
+		return
+	}
+	s.metrics.MovesTotal.Inc()
+	if ended {
+		s.metrics.GamesFinished.WithLabelValues(resultToDB(result)).Inc()
 	}
 }
 
@@ -160,6 +175,7 @@ func (s *Server) SubmitMove(ctx context.Context, req *gamev1.SubmitMoveRequest) 
 			s.notifySession(ctx, g.ID, req.GetPlayerId())
 		}
 	}
+	s.recordMove(ended, result)
 	if ended {
 		s.applyRatings(ctx, g.ID, result)
 		s.requestAnalysis(ctx, g.ID)

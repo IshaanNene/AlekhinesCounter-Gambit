@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
@@ -29,7 +30,8 @@ type Clients struct {
 func Dial(gameAddr, sessionAddr string) (*Clients, error) {
 	c := &Clients{}
 
-	gameConn, err := grpc.NewClient(gameAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	gameConn, err := grpc.NewClient(gameAddr, grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler()))
 	if err != nil {
 		return nil, fmt.Errorf("dial game-service %q: %w", gameAddr, err)
 	}
@@ -40,7 +42,8 @@ func Dial(gameAddr, sessionAddr string) (*Clients, error) {
 	c.Auth = authv1.NewAuthServiceClient(gameConn)
 
 	if sessionAddr != "" {
-		sessionConn, err := grpc.NewClient(sessionAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		sessionConn, err := grpc.NewClient(sessionAddr, grpc.WithTransportCredentials(insecure.NewCredentials()),
+			grpc.WithStatsHandler(otelgrpc.NewClientHandler()))
 		if err != nil {
 			return nil, fmt.Errorf("dial session-manager %q: %w", sessionAddr, err)
 		}

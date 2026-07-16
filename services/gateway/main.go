@@ -23,6 +23,7 @@ import (
 
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/config"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/redisx"
+	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/telemetry"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/services/gateway/graph"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/services/gateway/graph/generated"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/services/gateway/internal/auth"
@@ -38,6 +39,16 @@ const shutdownTimeout = 15 * time.Second
 func main() {
 	log := config.NewLogger()
 
+	metrics := telemetry.NewMetrics("gateway")
+	tracingShutdown, err := telemetry.InitTracing(context.Background(),
+		"gateway", version, config.Getenv("ACG_OTLP_ENDPOINT", ""))
+	if err != nil {
+		log.Warn("tracing init failed; continuing without it", "error", err)
+	}
+	defer func() { _ = tracingShutdown(context.Background()) }()
+	metricsShutdown := telemetry.ServeMetrics(config.Getenv("ACG_METRICS_ADDR", ":9101"), metrics, log)
+	defer func() { _ = metricsShutdown(context.Background()) }()
+
 	addr := config.Getenv("ACG_GATEWAY_ADDR", ":8080")
 	gameAddr := config.Getenv("ACG_GAME_ADDR_CLIENT", "localhost:50051")
 	sessionAddr := config.Getenv("ACG_SESSION_ADDR", "")
@@ -51,10 +62,10 @@ func main() {
 		log.Error("ACG_SESSION_SECRET is required (32+ bytes)")
 		os.Exit(1)
 	}
-	signer, err := auth.NewSigner(secret, auth.DefaultTTL,
+	signer, serr := auth.NewSigner(secret, auth.DefaultTTL,
 		config.Getenv("ACG_COOKIE_SECURE", "false") == "true")
-	if err != nil {
-		log.Error("invalid session secret", "error", err)
+	if serr != nil {
+		log.Error("invalid session secret", "error", serr)
 		os.Exit(1)
 	}
 

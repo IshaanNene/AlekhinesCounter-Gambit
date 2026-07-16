@@ -1,0 +1,22 @@
+# A couple of alerts that read the chess-specific metrics, to show the signal is
+# actionable rather than decorative.
+groups:
+  - name: alekhine
+    rules:
+      - alert: HighRPCErrorRate
+        expr: |
+          sum(rate(acg_rpc_requests_total{outcome="error"}[5m])) by (service)
+            / sum(rate(acg_rpc_requests_total[5m])) by (service) > 0.05
+        for: 2m
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $labels.service }} error rate above 5%"
+
+      - alert: EngineAnalysisBacklog
+        # Analyses should keep pace; a stalled worker pool shows as no throughput
+        # while games keep finishing.
+        expr: rate(acg_engine_analyses_total[5m]) == 0 and rate(acg_games_finished_total[5m]) > 0
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "Games are finishing but nothing is being analysed"

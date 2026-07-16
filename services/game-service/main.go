@@ -24,10 +24,12 @@ import (
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/objstore"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/redisx"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/store"
+	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/telemetry"
 	authv1 "github.com/IshaanNene/AlekhinesCounter-Gambit/proto/gen/go/auth/v1"
 	gamev1 "github.com/IshaanNene/AlekhinesCounter-Gambit/proto/gen/go/game/v1"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/services/game-service/internal/server"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/services/game-service/internal/session"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 )
 
 var version = "dev"
@@ -49,6 +51,17 @@ func migrateWithRetry(log *slog.Logger, dsn string) error {
 
 func main() {
 	log := config.NewLogger()
+
+	// Observability. Both degrade to no-ops when unconfigured.
+	metrics := telemetry.NewMetrics("game-service")
+	tracingShutdown, err := telemetry.InitTracing(context.Background(),
+		"game-service", version, config.Getenv("ACG_OTLP_ENDPOINT", ""))
+	if err != nil {
+		log.Warn("tracing init failed; continuing without it", "error", err)
+	}
+	defer func() { _ = tracingShutdown(context.Background()) }()
+	metricsShutdown := telemetry.ServeMetrics(config.Getenv("ACG_METRICS_ADDR", ":9101"), metrics, log)
+	defer func() { _ = metricsShutdown(context.Background()) }()
 
 	addr := config.Getenv("ACG_GAME_ADDR", ":50051")
 	dsn := config.Getenv("ACG_POSTGRES_DSN", "postgres://acg:acg@localhost:5433/acg?sslmode=disable")
@@ -72,7 +85,8 @@ func main() {
 	}
 
 	ctx := context.Background()
-	st, err := store.Connect(ctx, dsn)
+	var st *store.Store
+	st, err = store.Connect(ctx, dsn)
 	if err != nil {
 		log.Error("failed to connect to postgres", "error", err)
 		os.Exit(1)
@@ -148,8 +162,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	grpcServer := grpc.NewServer()
-	gamev1.RegisterGameServiceServer(grpcServer, server.New(st, eng, sess, events, objects, analysisDepth, log))
+	grpcServer := grpc.NewServer(
+		// otelgrpc produces the trace span; our interceptor produces the metrics.
+		grpc.StatsHandler(otelgrpc.NewServerHandler()),
+		grpc.ChainUnaryInterceptor(metrics.UnaryServerInterceptor()),
+	)
+	gamev1.RegisterGameServiceServer(grpcServer, server.New(st, eng, sess, events, objects, analysisDepth, metrics, log))
 	// Identity lives beside the users table but is a separate service: the
 	// gateway owns sessions, this only verifies credentials.
 	deliverTokens := config.Getenv("ACG_MAIL_ENABLED", "false") == "true"
