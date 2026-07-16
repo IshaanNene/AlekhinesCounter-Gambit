@@ -4,6 +4,6 @@ FROM nginx:1.27-alpine
 
 COPY web/nginx.conf /etc/nginx/conf.d/default.conf
 COPY web/index.html web/styles.css web/app.js web/chess.js web/graphql.js \
-     web/settings.js web/settings-ui.js web/account.js /usr/share/nginx/html/
+     web/settings.js web/settings-ui.js web/account.js web/analysis.js /usr/share/nginx/html/
 
 EXPOSE 80

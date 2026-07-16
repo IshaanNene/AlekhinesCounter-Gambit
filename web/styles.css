@@ -781,3 +781,79 @@ h1, h2 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
 .history__delta.is-up { color: var(--good); }
 .history__delta.is-down { color: var(--danger); }
 .history__empty { padding: 8px; font-size: 12px; color: var(--ink-faint); }
+
+/* ── Post-game analysis ─────────────────────────────────────────────────── */
+.analysis { display: flex; flex-direction: column; gap: 10px; }
+
+.analysis__pending {
+  padding: 12px;
+  font-size: 12px;
+  color: var(--ink-faint);
+  border-radius: 12px;
+  box-shadow: var(--nm-inset-sm);
+}
+
+/* Accuracy: the headline number, so it gets the raised treatment. */
+.acc {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.acc__side {
+  padding: 12px;
+  text-align: center;
+  border-radius: 12px;
+  box-shadow: var(--nm-raised-sm);
+}
+.acc__who {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--ink-faint);
+}
+.acc__num {
+  margin-top: 4px;
+  font-size: 22px; font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+}
+.acc__sub { margin-top: 2px; font-size: 10.5px; color: var(--ink-faint); }
+
+.stat-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 12px;
+  font-size: 12px; color: var(--ink-soft);
+  border-radius: 10px;
+  box-shadow: var(--nm-inset-sm);
+}
+.stat-row strong { color: var(--ink); font-variant-numeric: tabular-nums; }
+
+/* A theoretical novelty is the rarest thing here, so it earns the accent. */
+.novelty {
+  padding: 10px 12px;
+  font-size: 11.5px; line-height: 1.5;
+  color: var(--accent);
+  border-radius: 10px;
+  box-shadow: var(--nm-inset-sm);
+}
+.novelty strong { display: block; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; }
+
+/* Move-quality icons in the move list. */
+.moves__ply { position: relative; }
+.q { margin-left: 4px; font-size: 10px; }
+.q--BRILLIANT { color: #26c2a3; }
+.q--BEST      { color: var(--good); }
+.q--EXCELLENT { color: var(--good); opacity: 0.75; }
+.q--GOOD      { color: var(--ink-faint); }
+.q--INACCURACY { color: #e6a23c; }
+.q--MISTAKE   { color: #e08b3c; }
+.q--BLUNDER   { color: var(--danger); }
+
+/* The eval graph: a sparkline of who stood better, over the whole game. */
+.evalgraph {
+  width: 100%; height: 64px;
+  border-radius: 10px;
+  box-shadow: var(--nm-inset-sm);
+  overflow: hidden;
+}
+.evalgraph__fill { fill: var(--accent-soft); }
+.evalgraph__line { fill: none; stroke: var(--accent); stroke-width: 1.5; }
+.evalgraph__mid { stroke: var(--ink-faint); stroke-width: 0.5; stroke-dasharray: 3 3; opacity: 0.5; }

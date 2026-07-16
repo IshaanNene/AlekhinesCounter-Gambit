@@ -8,7 +8,16 @@
 // per user without changing any call site, because everything reads through
 // get()/set().
 
-const STORAGE_KEY = "acg.settings.v1";
+// Bumped to v2 when the post-game analysis toggles went from disabled
+// placeholders to real features.
+//
+// A stored preference must beat a new default — that is the whole point of
+// saving it. But those keys were persisted as `false` while the controls were
+// *disabled*, so nobody ever chose that value; honouring it would silently hide
+// the feature from everyone who had opened the old build. Versioning the key
+// discards defaults nobody set, at the cost of resetting genuine preferences
+// once. Worth it pre-release; after launch this would want a per-key migration.
+const STORAGE_KEY = "acg.settings.v2";
 
 /**
  * Preference groups. Each field:
@@ -108,29 +117,31 @@ export const SETTINGS_SCHEMA = [
   },
   {
     group: "Post-game analysis",
-    // These depend on the async analysis pipeline (Kafka + engine workers) and
-    // the ratings tables, which are Q3. Declared here so the roadmap is visible,
-    // disabled so the UI never claims a capability that does not exist yet.
     fields: [
       {
         key: "engineEval", label: "Engine evaluation", type: "toggle",
-        default: false, pending: "Q3",
-        hint: "Show the engine's evaluation for each move once a game ends.",
+        default: true,
+        hint: "Accuracy, an evaluation graph, and the engine's verdict on each move.",
       },
       {
         key: "moveClassification", label: "Move classification icons", type: "toggle",
-        default: false, pending: "Q3",
-        hint: "Brilliant, mistake, blunder markers in the move list.",
+        default: true,
+        hint: "Brilliant, mistake, and blunder markers in the move list.",
+      },
+      {
+        key: "showNovelty", label: "Highlight theoretical novelties", type: "toggle",
+        default: true,
+        hint: "Call out the first position in a game never seen before on this platform.",
       },
       {
         key: "moveTimestamps", label: "Show timestamps", type: "toggle",
-        default: false, pending: "Q3",
-        hint: "How long each move took.",
+        default: false, pending: "needs schema",
+        hint: "How long each move took. Requires per-move timing, which is not stored yet.",
       },
       {
         key: "coachRecap", label: "Post-game feedback", type: "toggle",
-        default: false, pending: "Q3",
-        hint: "A recap of the game's turning points.",
+        default: false, pending: "planned",
+        hint: "A written recap of the game's turning points.",
       },
     ],
   },

@@ -11,6 +11,7 @@ import { gql, GraphQLError, Subscriber } from "./graphql.js";
 import * as settings from "./settings.js";
 import { mountSettings } from "./settings-ui.js";
 import { mountAccount, refreshMe, ensureSignedIn, onAccountChange, me } from "./account.js";
+import { watchAnalysis, verdictFor, QUALITY_ICON } from "./analysis.js";
 import {
   parseFEN, parseUCI, squareName, glyphFor, boardOrder,
   isLightSquare, needsPromotion, formatClock, fileOf, rankOf,
@@ -280,18 +281,32 @@ function renderMoves() {
   }
   for (let i = 0; i < moves.length; i += 2) {
     list.append(cell("moves__no", `${i / 2 + 1}.`));
-    list.append(cell("moves__ply", moves[i].uci, i === moves.length - 1));
+    list.append(cell("moves__ply", moves[i].uci, i === moves.length - 1, moves[i].ply));
     list.append(moves[i + 1]
-      ? cell("moves__ply", moves[i + 1].uci, i + 1 === moves.length - 1)
+      ? cell("moves__ply", moves[i + 1].uci, i + 1 === moves.length - 1, moves[i + 1].ply)
       : cell("moves__ply", ""));
   }
   list.scrollTop = list.scrollHeight;
 }
 
-function cell(className, text, isLast = false) {
+function cell(className, text, isLast = false, ply = null) {
   const li = document.createElement("li");
   li.className = className + (isLast ? " is-last" : "");
   li.textContent = text;
+
+  // Annotate with the engine's verdict once the report has arrived.
+  if (ply !== null && text && settings.get("moveClassification")) {
+    const v = verdictFor(ply);
+    const icon = v ? QUALITY_ICON[v.quality] : "";
+    if (icon) {
+      const mark = document.createElement("span");
+      mark.className = `q q--${v.quality}`;
+      mark.textContent = icon;
+      mark.title = `${v.quality.toLowerCase()} — engine played ${v.bestUci}` +
+        (v.centipawnLoss > 0 ? ` (cost ${v.centipawnLoss}cp)` : "");
+      li.append(mark);
+    }
+  }
   return li;
 }
 
@@ -367,6 +382,12 @@ function applyGame(game) {
     renderBoard();
     playPremoveIfReady();
   });
+
+  // The report is produced asynchronously after the game ends, so this polls
+  // and re-renders the move list once the verdicts land.
+  if (settings.get("engineEval")) {
+    watchAnalysis(game, { onReport: () => renderMoves() });
+  }
 }
 
 async function openGame(id, { subscribe = true } = {}) {
