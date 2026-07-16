@@ -12,6 +12,7 @@ import * as settings from "./settings.js";
 import { mountSettings } from "./settings-ui.js";
 import { mountAccount, refreshMe, ensureSignedIn, onAccountChange, me } from "./account.js";
 import { watchAnalysis, verdictFor, QUALITY_ICON } from "./analysis.js";
+import { renderExplorer } from "./explorer.js";
 import {
   parseFEN, parseUCI, squareName, glyphFor, boardOrder,
   isLightSquare, needsPromotion, formatClock, fileOf, rankOf,
@@ -409,6 +410,9 @@ function applyGame(game) {
     renderBoard();
     playPremoveIfReady();
   });
+
+  // Show what real players do from the current position.
+  renderExplorer(state.board ? state.game?.fen : null);
 
   // The report is produced asynchronously after the game ends, so this polls
   // and re-renders the move list once the verdicts land.

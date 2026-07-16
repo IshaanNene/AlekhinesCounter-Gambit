@@ -874,3 +874,33 @@ h1, h2 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
   animation: spin 0.8s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Opening explorer ───────────────────────────────────────────────────── */
+.explorer { display: flex; flex-direction: column; gap: 4px; }
+.explorer__empty { padding: 8px; font-size: 12px; color: var(--ink-faint); }
+.explorer__row {
+  display: grid;
+  grid-template-columns: 3.2em 1fr auto;
+  align-items: center; gap: 8px;
+  padding: 7px 10px;
+  font-size: 12px;
+  border-radius: 9px;
+  box-shadow: var(--nm-inset-sm);
+  cursor: default;
+}
+.explorer__san {
+  font-family: ui-monospace, Menlo, monospace;
+  font-weight: 600; color: var(--ink);
+}
+.explorer__count { font-size: 10.5px; color: var(--ink-faint); }
+/* A W/D/B result bar: three proportional segments. */
+.explorer__bar {
+  display: flex; height: 12px; width: 90px;
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+  box-shadow: var(--nm-inset-sm);
+}
+.explorer__bar span { display: block; height: 100%; }
+.explorer__bar .w { background: var(--good); opacity: 0.85; }
+.explorer__bar .d { background: var(--ink-faint); opacity: 0.5; }
+.explorer__bar .b { background: var(--danger); opacity: 0.8; }
