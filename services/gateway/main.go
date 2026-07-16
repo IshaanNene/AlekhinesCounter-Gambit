@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -98,7 +99,11 @@ func main() {
 
 	// 20 requests/second sustained, bursting to 60: comfortably above a human
 	// playing chess, low enough to blunt a script.
-	limiter := redisx.NewLimiter(rdb, 20, 60)
+	// Env-configurable so load tests can measure raw backend throughput with the
+	// cap raised; 0 disables limiting entirely. Defaults protect a real deploy.
+	rlRPS, _ := strconv.Atoi(config.Getenv("ACG_RATE_LIMIT_RPS", "20"))
+	rlBurst, _ := strconv.Atoi(config.Getenv("ACG_RATE_LIMIT_BURST", "60"))
+	limiter := redisx.NewLimiter(rdb, float64(rlRPS), rlBurst)
 
 	srv := newGraphQLServer(&graph.Resolver{
 		Upstream:    clients,

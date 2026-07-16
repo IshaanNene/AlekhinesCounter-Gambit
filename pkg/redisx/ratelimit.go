@@ -74,7 +74,8 @@ func NewLimiter(client *redis.Client, rate float64, capacity int) *Limiter {
 // a cache outage into a full outage. The trade is deliberate — availability over
 // strict enforcement for a chess API.
 func (l *Limiter) Allow(ctx context.Context, key string) (allowed bool, remaining int) {
-	if l == nil || l.client == nil {
+	// rate <= 0 disables limiting (used to measure raw throughput under load).
+	if l == nil || l.client == nil || l.rate <= 0 {
 		return true, l.burst()
 	}
 	res, err := tokenBucket.Run(ctx, l.client,
