@@ -51,8 +51,17 @@
             <input class="slider" type="range" id="depth" min="1" max="20" value="10" />
           </label>
 
+          <button class="btn btn--primary" id="find-opponent">
+            <span class="btn__icon" aria-hidden="true">⚔</span> Find an opponent
+          </button>
+          <div class="queue" id="queue" hidden>
+            <span class="queue__spinner" aria-hidden="true"></span>
+            <span class="queue__text" id="queue-text">Looking for an opponent…</span>
+            <button class="btn btn--ghost" id="leave-queue">Cancel</button>
+          </div>
+
           <button class="btn" id="new-human">
-            <span class="btn__icon" aria-hidden="true">⚔</span> Two players
+            <span class="btn__icon" aria-hidden="true">🔗</span> Private game (share a link)
           </button>
 
           <div class="field-row">

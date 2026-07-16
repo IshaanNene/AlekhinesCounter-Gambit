@@ -29,6 +29,11 @@ const CREATE_GAME = `mutation($in: CreateGameInput!) { createGame(input: $in) { 
 const MOVE = `mutation($in: MoveInput!) { move(input: $in) { ${GAME_FIELDS} } }`;
 const RESIGN = `mutation($in: ResignInput!) { resign(input: $in) { ${GAME_FIELDS} } }`;
 const JOIN = `mutation($id: ID!) { joinGame(gameId: $id) { ${GAME_FIELDS} } }`;
+const ENTER_QUEUE = `mutation($in: QueueInput!) {
+  enterQueue(input: $in) { matched queueDepth game { ${GAME_FIELDS} } }
+}`;
+const LEAVE_QUEUE = `mutation($in: QueueInput!) { leaveQueue(input: $in) }`;
+const ON_MATCH = `subscription { matchFound { ${GAME_FIELDS} } }`;
 const GET_GAME = `query($id: ID!) { game(id: $id) { ${GAME_FIELDS} } }`;
 const LEGAL = `query($id: ID!) { legalMoves(gameId: $id) }`;
 const ON_GAME = `subscription($id: ID!) { gameUpdated(gameId: $id) { ${GAME_FIELDS} } }`;
@@ -51,6 +56,28 @@ const state = {
 
 const $ = (id) => document.getElementById(id);
 const subscriber = new Subscriber(onConnectionState);
+// A second socket: the game subscription is swapped per game, while the queue
+// must keep listening across that change.
+const matchSubscriber = new Subscriber(() => {});
+
+/** The time control we are queued for, so Cancel can leave the right queue. */
+let queuedFor = null;
+
+function showQueue(tc, depth) {
+  queuedFor = tc;
+  $("queue").hidden = false;
+  $("find-opponent").disabled = true;
+  $("queue-text").textContent = depth > 1
+    ? `Looking for an opponent… (${depth} waiting)`
+    : "Looking for an opponent…";
+}
+
+function hideQueue() {
+  queuedFor = null;
+  $("queue").hidden = true;
+  $("find-opponent").disabled = false;
+  matchSubscriber.close();
+}
 
 /* ── Toast ──────────────────────────────────────────────────────────────── */
 
@@ -753,6 +780,36 @@ async function init() {
     toast("You are playing Black.");
   });
 
+  press($("find-opponent"), async () => {
+    await ensureSignedIn();
+    const tc = { initialMs: timeControl().initialMs, incrementMs: timeControl().incrementMs };
+    const data = await gql(ENTER_QUEUE, { in: tc });
+    const ticket = data.enterQueue;
+
+    if (ticket.matched) {
+      startGame(ticket.game);
+      toast("Opponent found — good luck!");
+      return;
+    }
+
+    // Waiting: the opponent who arrives second creates the game, so we learn
+    // about it on the subscription rather than by polling.
+    showQueue(tc, ticket.queueDepth);
+    matchSubscriber.subscribe(ON_MATCH, {}, (p) => {
+      const game = p?.matchFound;
+      if (!game) return;
+      hideQueue();
+      startGame(game);
+      toast("Opponent found — good luck!");
+    });
+  });
+
+  press($("leave-queue"), async () => {
+    await gql(LEAVE_QUEUE, { in: queuedFor ?? timeControl() });
+    hideQueue();
+    toast("Left the queue.");
+  });
+
   press($("copy-link"), async () => {
     await navigator.clipboard.writeText($("share-link").value);
     toast("Link copied.");
@@ -790,6 +847,17 @@ async function init() {
   window.addEventListener("hashchange", () => {
     const id = location.hash.slice(1);
     if (id && id !== state.game?.id) openGame(id).catch(() => {});
+  });
+
+  // A closing tab should not leave a ghost in the queue that someone can be
+  // paired against. Best-effort: keepalive lets it outlive the page.
+  window.addEventListener("pagehide", () => {
+    if (!queuedFor) return;
+    navigator.sendBeacon?.(
+      "/graphql",
+      new Blob([JSON.stringify({ query: LEAVE_QUEUE, variables: { in: queuedFor } })],
+        { type: "application/json" }),
+    );
   });
 
   const initial = location.hash.slice(1);
