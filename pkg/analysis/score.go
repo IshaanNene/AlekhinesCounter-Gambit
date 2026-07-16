@@ -50,11 +50,20 @@ func (e Eval) Normalized() int {
 	if !e.Mate {
 		return clampInt(e.ScoreCP, -MateScore, MateScore)
 	}
-	// Nearer mates score higher, so M1 beats M5; sign carries who is mating.
-	if e.MateIn >= 0 {
+	switch {
+	case e.MateIn > 0:
+		// We are mating. Nearer is better, so M1 outranks M5.
 		return MateScore - e.MateIn*100
+	case e.MateIn < 0:
+		// We are being mated. Nearer is worse.
+		return -MateScore - e.MateIn*100
+	default:
+		// UCI reports `score mate 0` for a position where the side to move is
+		// ALREADY checkmated. Reading that as "mate in 0 for us" scores the mated
+		// side +10000 and makes delivering checkmate — the best move there is —
+		// look like a maximal blunder.
+		return -MateScore
 	}
-	return -MateScore - e.MateIn*100 // MateIn negative => we are being mated
 }
 
 // CentipawnLoss returns what a move cost the player who made it.
@@ -76,6 +85,25 @@ func CentipawnLoss(before, after Eval) int {
 		return 0
 	}
 	return clampInt(loss, 0, MaxLoss)
+}
+
+// LossForMove returns what a move cost, given whether it was the engine's choice.
+//
+// Playing the engine's own first choice costs nothing *by definition*: centipawn
+// loss measures how much worse than best you played, so the best move is the
+// zero point. The position may still be lost — but it was already lost before
+// the move, and that is not something the mover surrendered.
+//
+// This matters because evaluating positions independently at a fixed depth is
+// not self-consistent at tactical boundaries: a mate invisible at depth 12 from
+// one root becomes visible from the next, and the raw difference then charges
+// the player ~1000 centipawns for finding the only move that holds. Anchoring on
+// `matched` removes that artifact instead of letting it poison every average.
+func LossForMove(before, after Eval, matchedEngine bool) int {
+	if matchedEngine {
+		return 0
+	}
+	return CentipawnLoss(before, after)
 }
 
 // Classify grades a move.
@@ -137,6 +165,17 @@ func AccuracyFor(before, after Eval) float64 {
 	winBefore := WinPercent(float64(before.Normalized()))
 	winAfter := WinPercent(float64(-after.Normalized()))
 	return MoveAccuracy(winBefore - winAfter)
+}
+
+// AccuracyForMove scores a move, anchoring on the engine's choice for the same
+// reason LossForMove does: the best available move is 100% accurate by
+// definition, and any apparent drop there is fixed-depth noise rather than
+// something the player did.
+func AccuracyForMove(before, after Eval, matchedEngine bool) float64 {
+	if matchedEngine {
+		return 100
+	}
+	return AccuracyFor(before, after)
 }
 
 // MoveReport is the verdict on one played move.

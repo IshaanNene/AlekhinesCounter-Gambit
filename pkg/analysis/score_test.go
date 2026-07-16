@@ -59,6 +59,58 @@ func TestNormalizedRanksNearerMatesHigher(t *testing.T) {
 	}
 }
 
+// UCI's `score mate 0` means the side to move is already checkmated. Reading it
+// as "we mate in 0" scores the mated player +10000, which made delivering
+// checkmate score as a 1000-centipawn blunder.
+func TestMateZeroMeansTheSideToMoveIsMated(t *testing.T) {
+	mated := Eval{Mate: true, MateIn: 0}.Normalized()
+	if mated != -MateScore {
+		t.Errorf("mate 0 normalised to %d, want %d (the side to move is checkmated)", mated, -MateScore)
+	}
+	// And the move that delivers mate must be free, not maximally expensive:
+	// white is mating (+9900), and after it black is mated (-10000 from black's view).
+	before := Eval{Mate: true, MateIn: 1, BestMove: "h5f7"}
+	after := Eval{Mate: true, MateIn: 0}
+	if loss := CentipawnLoss(before, after); loss != 0 {
+		t.Errorf("delivering checkmate cost %d centipawns, want 0", loss)
+	}
+	// It should also read as near-perfect accuracy, not a catastrophe.
+	if acc := AccuracyFor(before, after); acc < 99 {
+		t.Errorf("accuracy for delivering mate = %.1f, want ~100", acc)
+	}
+}
+
+// The engine's own choice is the zero point of centipawn loss. Charging a
+// player for playing it is an artifact of evaluating positions independently at
+// a fixed depth — a mate invisible from one root appears from the next.
+func TestLossForMoveIsZeroWhenPlayingTheEnginesChoice(t *testing.T) {
+	// A lost position where the only move still loses: the raw difference is huge.
+	before := Eval{ScoreCP: -500, BestMove: "f6d7"}
+	after := Eval{Mate: true, MateIn: 2} // opponent mates from here regardless
+	if raw := CentipawnLoss(before, after); raw == 0 {
+		t.Fatal("expected the raw eval difference to be large; the test is not exercising the case")
+	}
+	if loss := LossForMove(before, after, true); loss != 0 {
+		t.Errorf("playing the engine's own choice cost %d, want 0 — the position was already lost", loss)
+	}
+	// A different move in the same spot is still measured normally.
+	if loss := LossForMove(before, after, false); loss == 0 {
+		t.Error("a non-matching move should still be charged")
+	}
+}
+
+func TestAccuracyForMoveIsPerfectWhenPlayingTheEnginesChoice(t *testing.T) {
+	before := Eval{ScoreCP: -500, BestMove: "f6d7"}
+	after := Eval{Mate: true, MateIn: 2}
+	if acc := AccuracyForMove(before, after, true); acc != 100 {
+		t.Errorf("the engine's own choice scored %.1f accuracy, want 100", acc)
+	}
+	// A different move is still judged on what it surrendered.
+	if acc := AccuracyForMove(before, after, false); acc >= 100 {
+		t.Errorf("a non-matching move scored %.1f; it should be judged normally", acc)
+	}
+}
+
 func TestClassify(t *testing.T) {
 	cases := []struct {
 		name    string
