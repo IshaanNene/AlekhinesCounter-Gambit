@@ -1,0 +1,12 @@
+# Auto-load the platform dashboard from a folder, so Grafana shows real panels
+# the moment it starts — no manual import. The JSON lives in ./dashboards, mounted
+# to the path below.
+apiVersion: 1
+providers:
+  - name: alekhine
+    type: file
+    disableDeletion: false
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

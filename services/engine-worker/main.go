@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 	healthv1 "google.golang.org/grpc/health/grpc_health_v1"
@@ -19,6 +20,7 @@ import (
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/config"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/objstore"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/openingbook"
+	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/telemetry"
 	enginev1 "github.com/IshaanNene/AlekhinesCounter-Gambit/proto/gen/go/engine/v1"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/services/engine-worker/internal/server"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/services/engine-worker/internal/uci"
@@ -43,11 +45,24 @@ func main() {
 	}
 	defer engine.Close()
 
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	// Observability: metrics + traces, exactly like the other Go services. The
+	// engine worker is the CPU-bound tier you scale, so its RPC rate, latency,
+	// and analysis count are the numbers that drive autoscaling decisions.
+	metrics := telemetry.NewMetrics("engine-worker")
+	tracingShutdown, terr := telemetry.InitTracing(ctx, "engine-worker", version, config.Getenv("ACG_OTLP_ENDPOINT", ""))
+	if terr != nil {
+		log.Warn("tracing init failed; continuing without it", "error", terr)
+	}
+	defer func() { _ = tracingShutdown(context.Background()) }()
+	metricsShutdown := telemetry.ServeMetrics(config.Getenv("ACG_METRICS_ADDR", ":9101"), metrics, log)
+	defer func() { _ = metricsShutdown(context.Background()) }()
+
 	// The opening book is enrichment for play, not a dependency. Load it from
 	// object storage (seeding the bucket on first run) so every replica serves
 	// the same book; fall back to the built-in seed when storage is absent.
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
 	book := loadBook(ctx, dialObjectStore(ctx, log), log)
 
 	lis, err := net.Listen("tcp", addr)
@@ -56,8 +71,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	grpcServer := grpc.NewServer()
-	enginev1.RegisterEngineServiceServer(grpcServer, server.New(engine, book))
+	grpcServer := grpc.NewServer(
+		// otelgrpc produces the trace span; our interceptor produces the metrics.
+		grpc.StatsHandler(otelgrpc.NewServerHandler()),
+		grpc.ChainUnaryInterceptor(metrics.UnaryServerInterceptor()),
+	)
+	enginev1.RegisterEngineServiceServer(grpcServer, server.New(engine, book, metrics))
 
 	healthSrv := health.NewServer()
 	healthSrv.SetServingStatus("", healthv1.HealthCheckResponse_SERVING)

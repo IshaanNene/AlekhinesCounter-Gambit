@@ -13,6 +13,7 @@ scrape_configs:
       - targets:
           - game-service:9101
           - gateway:9101
+          - engine-worker:9101
           - analysis-worker:9101
         labels:
           platform: alekhine

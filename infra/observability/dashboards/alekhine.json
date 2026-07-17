@@ -1,0 +1,91 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "graphTooltip": 1,
+  "time": { "from": "now-15m", "to": "now" },
+  "timezone": "browser",
+  "title": "Alekhine's Counter-Gambit — Platform",
+  "uid": "acg-platform",
+  "schemaVersion": 39,
+  "refresh": "10s",
+  "tags": ["alekhine"],
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "label": "Data source",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": { "text": "Prometheus", "value": "Prometheus" },
+        "hide": 0
+      }
+    ]
+  },
+  "panels": [
+    { "type": "row", "title": "Traffic & errors (RED)", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }, "id": 1 },
+    {
+      "type": "timeseries", "title": "RPC request rate by service", "id": 2,
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 1 },
+      "fieldConfig": { "defaults": { "unit": "reqps", "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "${datasource}" }, "expr": "sum(rate(acg_rpc_requests_total[$__rate_interval])) by (service)", "legendFormat": "{{service}}" } ]
+    },
+    {
+      "type": "timeseries", "title": "RPC error ratio by service", "id": 3,
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 1 },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "custom": { "drawStyle": "line", "fillOpacity": 10 }, "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 0.05 } ] } }, "overrides": [] },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "${datasource}" }, "expr": "sum(rate(acg_rpc_requests_total{outcome=\"error\"}[$__rate_interval])) by (service) / clamp_min(sum(rate(acg_rpc_requests_total[$__rate_interval])) by (service), 1e-9)", "legendFormat": "{{service}}" } ]
+    },
+    {
+      "type": "timeseries", "title": "RPC p95 latency by method", "id": 4,
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 1 },
+      "fieldConfig": { "defaults": { "unit": "s", "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "${datasource}" }, "expr": "histogram_quantile(0.95, sum(rate(acg_rpc_duration_seconds_bucket[$__rate_interval])) by (le, method))", "legendFormat": "{{method}}" } ]
+    },
+    { "type": "row", "title": "Chess", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 9 }, "id": 5 },
+    {
+      "type": "stat", "title": "Games in progress", "id": 6,
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 6, "w": 4, "x": 0, "y": 10 },
+      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [ { "color": "blue", "value": null } ] } }, "overrides": [] },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "${datasource}" }, "expr": "sum(acg_games_active)" } ]
+    },
+    {
+      "type": "stat", "title": "Eval cache hit rate", "id": 7,
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 6, "w": 4, "x": 4, "y": 10 },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1, "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "yellow", "value": 0.5 }, { "color": "green", "value": 0.8 } ] } }, "overrides": [] },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "${datasource}" }, "expr": "sum(rate(acg_eval_cache_hits_total[$__rate_interval])) / clamp_min(sum(rate(acg_eval_cache_hits_total[$__rate_interval])) + sum(rate(acg_eval_cache_misses_total[$__rate_interval])), 1e-9)" } ]
+    },
+    {
+      "type": "stat", "title": "Matchmaking wait p95", "id": 8,
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 6, "w": 4, "x": 8, "y": 10 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "${datasource}" }, "expr": "histogram_quantile(0.95, sum(rate(acg_matchmaking_wait_seconds_bucket[$__rate_interval])) by (le))" } ]
+    },
+    {
+      "type": "timeseries", "title": "Moves / sec", "id": 9,
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 10 },
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "drawStyle": "line", "fillOpacity": 15 } }, "overrides": [] },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "${datasource}" }, "expr": "sum(rate(acg_moves_total[$__rate_interval]))", "legendFormat": "moves/s" } ]
+    },
+    {
+      "type": "timeseries", "title": "Engine analyses / sec", "id": 10,
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 10 },
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "drawStyle": "line", "fillOpacity": 15 } }, "overrides": [] },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "${datasource}" }, "expr": "sum(rate(acg_engine_analyses_total[$__rate_interval]))", "legendFormat": "analyses/s" } ]
+    },
+    {
+      "type": "timeseries", "title": "Games finished / sec by result", "id": 11,
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 7, "w": 24, "x": 0, "y": 16 },
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "drawStyle": "bars", "fillOpacity": 40, "stacking": { "mode": "normal" } } }, "overrides": [] },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "${datasource}" }, "expr": "sum(rate(acg_games_finished_total[$__rate_interval])) by (result)", "legendFormat": "{{result}}" } ]
+    }
+  ]
+}

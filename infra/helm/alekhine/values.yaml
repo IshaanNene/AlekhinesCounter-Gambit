@@ -50,6 +50,7 @@ services:
     image: alekhinescounter-gambit-engine-worker:latest
     replicas: 3            # stateless and CPU-bound — the thing you scale under load
     port: 50052
+    metricsPort: 9101      # RED metrics + /healthz probes, scraped by Prometheus
     env:
       ACG_S3_ENDPOINT: "minio:9000"   # loads (and seeds) the opening book
     envFromSecret: acg-secrets

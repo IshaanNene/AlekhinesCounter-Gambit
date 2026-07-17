@@ -9,6 +9,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/openingbook"
+	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/telemetry"
 	enginev1 "github.com/IshaanNene/AlekhinesCounter-Gambit/proto/gen/go/engine/v1"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/services/engine-worker/internal/uci"
 )
@@ -16,14 +17,15 @@ import (
 // Server adapts a uci.Engine to the EngineService gRPC interface.
 type Server struct {
 	enginev1.UnimplementedEngineServiceServer
-	engine *uci.Engine
-	book   *openingbook.Book
+	engine  *uci.Engine
+	book    *openingbook.Book
+	metrics *telemetry.Metrics
 }
 
 // New returns a Server backed by the given engine and opening book. The book may
-// be nil (or empty), in which case every request is searched.
-func New(engine *uci.Engine, book *openingbook.Book) *Server {
-	return &Server{engine: engine, book: book}
+// be nil (or empty), in which case every request is searched. metrics may be nil.
+func New(engine *uci.Engine, book *openingbook.Book, metrics *telemetry.Metrics) *Server {
+	return &Server{engine: engine, book: book, metrics: metrics}
 }
 
 // Analyze evaluates the requested position and returns the engine's best move.
@@ -43,6 +45,10 @@ func (s *Server) Analyze(ctx context.Context, req *enginev1.AnalyzeRequest) (*en
 		}
 	}
 
+	// A real search — a book hit above is not an "analysis", so it is not counted.
+	if s.metrics != nil {
+		s.metrics.EngineAnalyses.Inc()
+	}
 	res, err := s.engine.Analyze(ctx, req.GetFen(), req.GetDepth(), req.GetMovetimeMs())
 	if err != nil {
 		return nil, status.Error(codes.Internal, fmt.Sprintf("analyze: %v", err))
