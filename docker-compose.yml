@@ -27,8 +27,15 @@ services:
     environment:
       ACG_ENGINE_ADDR: ":50052"
       ACG_STOCKFISH_PATH: "/usr/games/stockfish"
+      # Loads (and seeds, on first run) the opening book from object storage.
+      ACG_S3_ENDPOINT: "minio:9000"
+      ACG_S3_ACCESS_KEY: "acg"
+      ACG_S3_SECRET_KEY: "acg-secret-key"
     ports:
       - "50052:50052"
+    depends_on:
+      minio:
+        condition: service_healthy
 
   redis:
     # Stack, not plain redis: Bloom (novelty / PGN dedupe) and TimeSeries
