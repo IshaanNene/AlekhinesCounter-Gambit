@@ -1,33 +1,43 @@
-run:
-  timeout: 5m
-
-issues:
-  exclude-dirs:
-    - proto/gen
-  exclude-rules:
-    # Tests may use fatal helpers and long lines freely.
-    - path: _test\.go
-      linters:
-        - errcheck
-
+version: "2"
 linters:
   enable:
-    - errcheck
-    - govet
-    - ineffassign
-    - staticcheck
-    - unused
+    - bodyclose
+    - misspell
+    - revive
+    - unconvert
+  settings:
+    revive:
+      rules:
+        - name: exported
+          disabled: true
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - errcheck
+        path: _test\.go
+    paths:
+      - proto/gen
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
     - gofmt
     - goimports
-    - misspell
-    - unconvert
-    - bodyclose
-    - revive
-
-linters-settings:
-  goimports:
-    local-prefixes: github.com/IshaanNene/AlekhinesCounter-Gambit
-  revive:
-    rules:
-      - name: exported
-        disabled: true
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/IshaanNene/AlekhinesCounter-Gambit
+  exclusions:
+    generated: lax
+    paths:
+      - proto/gen
+      - third_party$
+      - builtin$
+      - examples$

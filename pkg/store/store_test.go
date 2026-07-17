@@ -35,6 +35,7 @@ func TestCreateAndGetGame(t *testing.T) {
 
 	g, err := st.CreateGame(ctx, CreateGameParams{
 		WhiteID:     white,
+		VsEngine:    true,
 		EngineDepth: 10,
 		StartFEN:    chess.StartFEN,
 	})
@@ -42,7 +43,10 @@ func TestCreateAndGetGame(t *testing.T) {
 		t.Fatalf("CreateGame: %v", err)
 	}
 	if !g.VsEngine {
-		t.Error("expected VsEngine=true when black is empty")
+		t.Error("expected VsEngine=true for an engine game")
+	}
+	if g.AwaitingOpponent {
+		t.Error("an engine game is never awaiting an opponent")
 	}
 
 	// Apply a move and persist it.

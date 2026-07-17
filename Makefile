@@ -10,7 +10,7 @@ PROTOC_GEN_GO          := google.golang.org/protobuf/cmd/protoc-gen-go@v1.35.2
 PROTOC_GEN_GO_GRPC     := google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.5.1
 GOOSE                  := github.com/pressly/goose/v3/cmd/goose@v3.22.1
 GRPCURL                := github.com/fullstorydev/grpcurl/cmd/grpcurl@v1.9.2
-GOLANGCI_LINT          := github.com/golangci/golangci-lint/cmd/golangci-lint@v1.62.2
+GOLANGCI_LINT          := github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.1.6
 
 # Local defaults (override via env)
 ACG_POSTGRES_DSN ?= postgres://acg:acg@localhost:5433/acg?sslmode=disable
