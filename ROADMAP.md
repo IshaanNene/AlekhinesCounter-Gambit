@@ -174,10 +174,11 @@ downloadable; opening book influences engine play.
 
 ### Epic 3.1 — Kafka event backbone
 - [x] Topics: `game-finished`, `analysis-requested`, `analysis-completed`
-- [ ] Game service produces move/game events to Kafka
-- [ ] Engine workers consume `analysis-requests` (pull-based work queue)
-- [ ] Consumer groups for horizontal scaling of workers
-- [ ] Schema registry / protobuf serialization on the wire
+- [x] Game service produces move/game events to Kafka
+- [x] Workers consume `analysis-requested` (pull-based work queue)
+- [x] Consumer groups for horizontal scaling of workers (`analysis-workers` group)
+- [x] Protobuf serialization on the wire (proto.Marshal in `kafkax`; the proto
+      schemas are the contract — a standalone registry is the enterprise variant)
 
 ### Epic 3.2 — Analysis pipeline
 - [x] On game end, enqueue full-game analysis request
@@ -190,9 +191,11 @@ downloadable; opening book influences engine play.
 ### Epic 3.3 — MinIO object storage
 - [x] Store PGN archives (S3-compatible, real SAN generated from the game)
 - [x] Presigned download URLs via the gateway (split-horizon aware)
-- [ ] Store full analysis artifacts (JSON) keyed by game id — deferred; the report
-      already lives in Postgres and is served over GraphQL
-- [ ] Opening book files + serve to engine workers — deferred to a later phase
+- [x] Store full analysis artifacts (JSON) keyed by game id (analysis-worker
+      archives the report as JSON to the `analysis` bucket, best-effort)
+- [x] Opening book files + serve to engine workers (`pkg/openingbook`; the book
+      lives in the `books` bucket, is loaded by every engine replica, and is
+      consulted for play via the `use_book` flag — never for analysis)
 
 ### Epic 3.4 — Ratings & history
 - [x] Elo rating updates on game completion (tiered K-factor)

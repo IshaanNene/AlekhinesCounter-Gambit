@@ -8,6 +8,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/openingbook"
 	enginev1 "github.com/IshaanNene/AlekhinesCounter-Gambit/proto/gen/go/engine/v1"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/services/engine-worker/internal/uci"
 )
@@ -16,17 +17,30 @@ import (
 type Server struct {
 	enginev1.UnimplementedEngineServiceServer
 	engine *uci.Engine
+	book   *openingbook.Book
 }
 
-// New returns a Server backed by the given engine.
-func New(engine *uci.Engine) *Server {
-	return &Server{engine: engine}
+// New returns a Server backed by the given engine and opening book. The book may
+// be nil (or empty), in which case every request is searched.
+func New(engine *uci.Engine, book *openingbook.Book) *Server {
+	return &Server{engine: engine, book: book}
 }
 
 // Analyze evaluates the requested position and returns the engine's best move.
+//
+// When the caller opts in with use_book (engine play, not analysis) and the
+// position is in the opening book, the book move is returned without searching —
+// giving fast, varied openings. Analysis never sets the flag, so it always gets
+// a true evaluation.
 func (s *Server) Analyze(ctx context.Context, req *enginev1.AnalyzeRequest) (*enginev1.AnalyzeResponse, error) {
 	if req.GetFen() == "" {
 		return nil, status.Error(codes.InvalidArgument, "fen is required")
+	}
+
+	if req.GetUseBook() {
+		if move, ok := s.book.Move(req.GetFen()); ok {
+			return &enginev1.AnalyzeResponse{Bestmove: move, FromBook: true}, nil
+		}
 	}
 
 	res, err := s.engine.Analyze(ctx, req.GetFen(), req.GetDepth(), req.GetMovetimeMs())

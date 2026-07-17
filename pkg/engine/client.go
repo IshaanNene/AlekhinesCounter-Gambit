@@ -44,8 +44,11 @@ func (c *Client) Close() error { return c.conn.Close() }
 
 // BestMove asks the engine for its best move in the given position. depth 0 lets
 // the engine-worker apply its default.
+//
+// This is the *play* path, so it opts into the opening book: known opening
+// positions are answered from the book for fast, varied openings.
 func (c *Client) BestMove(ctx context.Context, fen string, depth int) (string, error) {
-	e, err := c.Analyze(ctx, fen, depth)
+	e, err := c.analyze(ctx, fen, depth, true /* useBook */)
 	if err != nil {
 		return "", err
 	}
@@ -63,7 +66,14 @@ func (c *Client) BestMove(ctx context.Context, fen string, depth int) (string, e
 // Only cached when a concrete depth was requested: with depth 0 the worker picks
 // its own, so the answer is not reproducible under that key.
 func (c *Client) Analyze(ctx context.Context, fen string, depth int) (*redisx.Eval, error) {
-	cacheable := depth > 0 && c.cache.Enabled()
+	return c.analyze(ctx, fen, depth, false /* useBook: analysis needs true evals */)
+}
+
+func (c *Client) analyze(ctx context.Context, fen string, depth int, useBook bool) (*redisx.Eval, error) {
+	// Book moves bypass the cache entirely: the eval cache is shared with the
+	// analysis pipeline, and a book move carries no real score, so caching it
+	// under (fen, depth) would later hand a bogus evaluation to analysis.
+	cacheable := !useBook && depth > 0 && c.cache.Enabled()
 
 	if cacheable {
 		if hit, ok := c.cache.Get(ctx, fen, uint32(depth)); ok {
@@ -72,8 +82,9 @@ func (c *Client) Analyze(ctx context.Context, fen string, depth int) (*redisx.Ev
 	}
 
 	resp, err := c.client.Analyze(ctx, &enginev1.AnalyzeRequest{
-		Fen:   fen,
-		Depth: uint32(depth),
+		Fen:     fen,
+		Depth:   uint32(depth),
+		UseBook: useBook,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("engine analyze: %w", err)

@@ -16,6 +16,10 @@ message AnalyzeRequest {
   uint32 depth = 2;
   // Search for at most this many milliseconds. Ignored if zero.
   uint32 movetime_ms = 3;
+  // When true, answer from the opening book if the position is in it, before
+  // searching. Set for engine *play* (opening variety) and left false for
+  // *analysis*, which must return true evaluations, never book moves.
+  bool use_book = 4;
 }
 
 message AnalyzeResponse {
@@ -31,4 +35,7 @@ message AnalyzeResponse {
   uint32 depth = 5;
   // Principal variation in UCI notation.
   repeated string pv = 6;
+  // True when the move came from the opening book rather than a search. The
+  // score fields are not meaningful in that case.
+  bool from_book = 7;
 }
