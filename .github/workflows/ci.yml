@@ -91,3 +91,51 @@ jobs:
         run: $(go env GOPATH)/bin/goose -dir migrations postgres "$ACG_TEST_DSN" up
       - name: Test
         run: go test ./... -count=1
+
+  # Build every service image and push it to GHCR — the "CI builds and pushes"
+  # half of the GitOps loop (ArgoCD deploys the result). Only on main, and only
+  # once lint/proto/test are green, so a red build never publishes an image.
+  images:
+    name: image (${{ matrix.service }})
+    needs: [lint, proto, test]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { service: gateway, dockerfile: services/gateway/Dockerfile }
+          - { service: game-service, dockerfile: services/game-service/Dockerfile }
+          - { service: engine-worker, dockerfile: services/engine-worker/Dockerfile }
+          - { service: analysis-worker, dockerfile: services/analysis-worker/Dockerfile }
+          - { service: session-manager, dockerfile: services/session-manager/Dockerfile }
+          - { service: web, dockerfile: web/Dockerfile }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          # metadata-action lowercases the image name, so the mixed-case owner is fine.
+          images: ghcr.io/${{ github.repository_owner }}/acg-${{ matrix.service }}
+          tags: |
+            type=sha,format=long
+            type=raw,value=latest,enable={{is_default_branch}}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Reuse layers across runs so only changed services rebuild slowly.
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
