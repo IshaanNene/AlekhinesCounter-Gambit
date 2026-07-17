@@ -16,11 +16,25 @@ autocannon + k6
 
 ## Quickstart
 
+**Local, one command (Docker Compose):**
+
 ```bash
 make tools     # one-time: install buf, protoc plugins, goose, grpcurl, linter
-make up        # bring up postgres + engine-worker + game-service (Docker Compose)
-make run-game  # play a full game vs Stockfish from the terminal
+make up        # all services + Postgres/Redis/Kafka/MinIO + Prometheus/Grafana/Jaeger
+               # → app http://localhost:3000, Grafana :3001, Jaeger :16686
 make down      # tear it all down
+```
+
+**On Kubernetes (the real deployment, on a local kind cluster):**
+
+```bash
+cd infra/terraform && terraform apply   # provision the kind cluster (Terraform)
+make k8s-deploy                          # build images, load them, helm install
+make k8s-ingress                         # install the ingress-nginx controller
+                                         # → app http://localhost:8888 (ingress)
+
+# GitOps: let ArgoCD own the deployment from git
+make argocd-install && make argocd-app   # push to main → ArgoCD syncs the cluster
 ```
 
 Run `make help` to see every target.
@@ -29,12 +43,16 @@ Run `make help` to see every target.
 
 ```
 proto/        protobuf contracts (source of truth) + generated Go stubs
-pkg/chess/    shared chess logic (board, FEN, legal move generation)
-services/     game-service, engine-worker, gateway (Q2), session-manager (Q2, Erlang)
+pkg/          shared libraries: chess, engine client, redisx, kafkax, objstore,
+              openingbook, analysis, telemetry, store
+services/     gateway, game-service, engine-worker, analysis-worker,
+              session-manager (Erlang/OTP)
+web/          dependency-free neumorphic web client (served by NGINX)
 cmd/          small binaries (play CLI)
 migrations/   SQL migrations (goose)
-infra/        Helm, Terraform, k8s, observability (Q4)
-load/         autocannon + k6 load tests (Q4)
+infra/        terraform (cluster) · helm (apps) · argocd (GitOps) · k8s (add-ons)
+              · observability (Prometheus/Grafana/Jaeger config + dashboard)
+load/         autocannon + k6 load tests, and the chaos/resilience suite
 docs/adr/     architecture decision records
 ```
 
@@ -52,7 +70,7 @@ Stockfish end-to-end through real gRPC services, persisted to Postgres, via
 - `docker-compose.yml` — one-command local stack; `cmd/play` CLI to play a game.
 - CI (GitHub Actions) — build, test (with Postgres + Stockfish), lint, proto drift.
 
-**Q2 (distributed core & real-time) — in progress.** The Erlang/OTP session
+**Q2 (distributed core & real-time) — complete.** The Erlang/OTP session
 manager is live and bridged to Go over gRPC:
 
 - `session-manager` (Erlang/OTP) — one supervised `gen_server` per live game
@@ -90,5 +108,45 @@ mutation { move(input: { gameId: "<id>", uci: "e2e4" }) { fen moves { ply uci } 
 query    { game(id: "<id>") { status endReason clock { whiteMs blackMs running } } }
 ```
 
-Next in Q2: WebSocket subscriptions, Redis fanout/cache, matchmaking + auth.
-See [TASKS.md](TASKS.md).
+**Q3 (event-driven data & analysis) — complete.** Finished games flow through
+Kafka to a pool of workers and come back as insight:
+
+- **Kafka event backbone** — game-service publishes `analysis-requested` on game
+  end (protobuf on the wire); a consumer group of `analysis-worker`s pulls the
+  work, so analysis capacity scales by adding replicas, not by touching producers.
+- **Async analysis** — each position evaluated once (N+1 calls for N moves),
+  yielding centipawn loss, accuracy (win%-domain), and per-move verdicts
+  (blunder/mistake/brilliant). Surfaced as an eval graph in the web client.
+- **Novelty detection (RedisBloom)** and **fair-play signals (RedisTimeSeries)** —
+  the first previously-unseen position in a game is flagged; per-player
+  engine-match/accuracy series are recorded for later human review (see ADR-0003).
+- **Object storage (MinIO)** — PGN archives and full analysis JSON, downloadable
+  via split-horizon presigned URLs. An **opening book** lives here too: engine
+  workers load it at startup (seeding on first run) and play weighted-random book
+  moves for opening variety — never during analysis, which needs true evals.
+- **Opening explorer** — transposition-collapsing statistics over stored games.
+
+**Q4 (production platform) — complete.** The whole architecture runs on
+Kubernetes, delivered by GitOps, observed end-to-end:
+
+- **Containerized & orchestrated** — six multi-stage images; a Helm umbrella
+  chart templates every service with HPAs, probes, and resource limits. Postgres
+  and MinIO are StatefulSets on PVCs; Kafka is a deliberately disposable
+  single-node KRaft node (it can't recover its log on restart, so it self-heals
+  fresh — Postgres is the source of truth).
+- **Terraform** provisions the cluster (kind locally; the EKS/GKE swap point is
+  one file). **ingress-nginx** path-routes GraphQL/WebSocket/static on one host.
+- **GitOps (ArgoCD)** — the cluster is reconciled from this repo; a push to `main`
+  syncs, and manual drift self-heals in ~5s. **CI (GitHub Actions)** lints, checks
+  proto drift, tests against real Postgres + Stockfish, and builds + pushes all
+  six images to GHCR.
+- **Observability** — RED + chess metrics on every Go service (Prometheus),
+  an auto-provisioned Grafana dashboard, alerting rules, and distributed traces
+  across gateway → game-service → engine-worker (OpenTelemetry → Jaeger).
+- **Load & chaos testing** — autocannon + k6 baselines (~18.8k req/s reads, move
+  p95 15ms), and a chaos suite (pod kills, rolling restarts, Redis/Postgres
+  outages, HPA) that **found and fixed two real dependency-timeout bugs**
+  (see [load/chaos/RESULTS.md](load/chaos/RESULTS.md)).
+
+See [ROADMAP.md](ROADMAP.md) for the full epic-by-epic status and [docs/adr/](docs/adr/)
+for the architecture decisions.
