@@ -13,6 +13,7 @@ import { mountSettings } from "./settings-ui.js";
 import { mountAccount, refreshMe, ensureSignedIn, onAccountChange, me } from "./account.js";
 import { watchAnalysis, verdictFor, QUALITY_ICON } from "./analysis.js";
 import { renderExplorer } from "./explorer.js";
+import { mountToggle as mountThemeToggle } from "./theme.js";
 import {
   parseFEN, parseUCI, squareName, glyphFor, boardOrder,
   isLightSquare, needsPromotion, formatClock, fileOf, rankOf,
@@ -737,6 +738,7 @@ function startGame(game) {
 
 async function init() {
   mountSettings({ openButton: $("open-settings"), drawer: $("settings-drawer") });
+  mountThemeToggle($("theme-toggle"));
   mountAccount({ toast, friendlyError, onOpenGame: (id) => openGame(id) });
   applySettings();
 

@@ -57,29 +57,32 @@
   --radius-pill: 999px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --surface: #2e3238;
-    --light: #383d45;
-    --dark: #24272b;
+/* Dark palette. Applied via a `data-theme="dark"` attribute on <html> — the
+   single source of truth, set before first paint by an inline snippet in the
+   HTML and flipped by theme.js. An attribute (not the media query) so an
+   explicit user choice can override the OS preference; the head snippet seeds
+   the initial value *from* that OS preference, so "auto" is still the default. */
+:root[data-theme="dark"] {
+  --surface: #2e3238;
+  --light: #383d45;
+  --dark: #24272b;
 
-    --nm-concave: linear-gradient(145deg, #292d32, #33383f);
-    --nm-convex: linear-gradient(145deg, #33383f, #292d32);
+  --nm-concave: linear-gradient(145deg, #292d32, #33383f);
+  --nm-convex: linear-gradient(145deg, #33383f, #292d32);
 
-    --ink: #e6e8ec;
-    --ink-soft: #a4abb6;
-    --ink-faint: #767d88;
+  --ink: #e6e8ec;
+  --ink-soft: #a4abb6;
+  --ink-faint: #767d88;
 
-    --accent: #8b98e8;
-    --accent-soft: rgba(139, 152, 232, 0.24);
-    --danger: #e08b87;
-    --good: #7dc79a;
+  --accent: #8b98e8;
+  --accent-soft: rgba(139, 152, 232, 0.24);
+  --danger: #e08b87;
+  --good: #7dc79a;
 
-    --sq-light: #3a3f47;
-    --sq-dark: #262a2f;
-    --piece-white: #f2f4f7;
-    --piece-black: #14161a;
-  }
+  --sq-light: #3a3f47;
+  --sq-dark: #262a2f;
+  --piece-white: #f2f4f7;
+  --piece-black: #14161a;
 }
 
 /* ── Base ───────────────────────────────────────────────────────────────── */

@@ -7,6 +7,22 @@
   <meta name="description" content="A distributed chess engine — play Stockfish or a friend, live." />
   <link rel="stylesheet" href="./styles.css" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>♞</text></svg>" />
+  <script>
+    // Set the theme before first paint so the page never flashes the wrong
+    // palette. A saved choice wins; otherwise follow the OS. theme.js takes it
+    // from here once the module loads.
+    (function () {
+      try {
+        var t = localStorage.getItem("acg.theme");
+        if (t !== "light" && t !== "dark") {
+          t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        }
+        document.documentElement.dataset.theme = t;
+      } catch (e) {
+        document.documentElement.dataset.theme = "light";
+      }
+    })();
+  </script>
 </head>
 <body>
   <div class="app">
@@ -28,6 +44,7 @@
           <span class="status-pill__dot" aria-hidden="true"></span>
           <span id="conn-text">connecting…</span>
         </div>
+        <button class="btn btn--icon" id="theme-toggle" aria-label="Toggle theme" title="Toggle theme">☾</button>
         <button class="btn btn--icon" id="open-settings" aria-expanded="false"
                 aria-controls="settings-drawer" aria-label="Settings" title="Settings">⚙</button>
       </div>
