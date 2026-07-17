@@ -7,6 +7,12 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+// limiterTimeout bounds the Redis round-trip in Allow. A healthy call is
+// sub-millisecond; this is loose enough never to reject a live Redis under load,
+// tight enough that an unreachable Redis fails open almost instantly instead of
+// adding its dial timeout to every request.
+const limiterTimeout = 50 * time.Millisecond
+
 // tokenBucket refills a bucket lazily and spends one token per request.
 //
 // Why a token bucket rather than a counter per fixed window: a fixed window lets
@@ -73,12 +79,20 @@ func NewLimiter(client *redis.Client, rate float64, capacity int) *Limiter {
 // On a Redis error it allows the request: a limiter that fails closed would turn
 // a cache outage into a full outage. The trade is deliberate — availability over
 // strict enforcement for a chess API.
+//
+// The Redis call is bounded by limiterTimeout so that "fails open" is fast: an
+// unreachable Redis must degrade to "no rate limiting" in milliseconds, not
+// stall every request on the client's dial timeout. (Chaos testing caught this:
+// without the bound, scaling Redis to zero hung even the health endpoint for
+// seconds, because every request passes through the limiter.)
 func (l *Limiter) Allow(ctx context.Context, key string) (allowed bool, remaining int) {
 	// rate <= 0 disables limiting (used to measure raw throughput under load).
 	if l == nil || l.client == nil || l.rate <= 0 {
 		return true, l.burst()
 	}
-	res, err := tokenBucket.Run(ctx, l.client,
+	rctx, cancel := context.WithTimeout(ctx, limiterTimeout)
+	defer cancel()
+	res, err := tokenBucket.Run(rctx, l.client,
 		[]string{"ratelimit:" + key},
 		l.rate, l.capacity, time.Now().UnixMilli(), 1,
 	).Slice()

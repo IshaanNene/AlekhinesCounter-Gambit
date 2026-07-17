@@ -1,0 +1,128 @@
+# Chaos & scalability results
+
+Fault-injection and scaling experiments run against the Kubernetes (kind)
+deployment with `load/chaos/chaos.sh`. Each drives read load through the
+gateway's NodePort (`localhost:8088`) with `probe.mjs` while `kubectl` scales or
+kills something underneath it.
+
+These are **shape** results, not a benchmark: one laptop runs the 3-node cluster,
+all its infra, *and* the load generator, so absolute throughput is a floor. What
+matters is the behaviour — does throughput scale, do failures stay contained,
+does the platform heal itself.
+
+Run one experiment: `load/chaos/chaos.sh <name>` · everything: `make chaos`.
+
+## Scalability — read throughput vs. gateway replicas
+
+Rate limiter disabled (`ACG_RATE_LIMIT_RPS=0`) so a single load-gen IP isn't
+throttled to 20/s.
+
+| gateway replicas | req/s | p50 | p99 | 5xx/err |
+|---|---|---|---|---|
+| ×1 | 17,649 | 2 ms | 39 ms | 0 |
+| ×2 | 21,551 | 1 ms | 28 ms | 0 |
+| ×4 | 21,481 | 1 ms | 30 ms | 0 |
+
+Throughput rises 1→2 and p99 tightens (39→28 ms), then plateaus at ×4: past two
+replicas the ceiling is downstream — the single `game-service` replica and a
+single-node NodePort ingress on one host — not the gateway. Honest read:
+horizontal scaling works until you hit the next bottleneck, and here that
+bottleneck is the laptop.
+
+## Fault tolerance — pod loss under load
+
+| scenario | result |
+|---|---|
+| Kill a gateway pod (of 2) mid-load | **526,976 served, 0 errors**, p99 33 ms |
+| Kill the sole game-service pod (of 1) | reads error, **self-heals in ~16 s** (reschedule + gRPC reconnect) |
+
+The lesson is redundancy, stated as a number: a replicated tier absorbs an
+instance loss with zero dropped requests; a singleton has a real recovery window,
+but Kubernetes restores it automatically with no human in the loop.
+
+## Zero-downtime deploy — rolling restart under load
+
+`kubectl rollout restart deploy/gateway` (2 replicas) during 30 s of load:
+
+- **617,876 served, 0 dropped.**
+
+Readiness gating + rolling update means a deploy never drops a request — the old
+pod keeps serving until the new one is ready.
+
+## Graceful degradation — Redis loss  ⚠️ found and fixed a bug
+
+The rate limiter calls Redis on **every** request. The first run of this
+experiment exposed a real defect: with Redis scaled to zero, *every* request —
+including the gateway-local `health` — **hung ~10 s**. `Allow()` passed the
+request context (no deadline) straight to Redis, so it blocked on the client's
+dial timeout before finally failing open. The intent ("availability over strict
+enforcement") was right; the implementation was too slow to deliver it.
+
+**Fix** (`pkg/redisx/ratelimit.go`): bound the Redis call to `limiterTimeout`
+(50 ms), so an unreachable Redis fails open in milliseconds instead of stalling
+the request path.
+
+After the fix, with Redis down:
+
+| Redis | throttled (429) | served (2xx) | 5xx/err | `health` latency |
+|---|---|---|---|---|
+| up | 131,288 | 182 | 0 | — |
+| **down** | 0 | 5,520 | **0** | **62 ms** (was ~10 s) |
+
+Killing Redis now releases throttling and breaks nothing: reads are
+Postgres-backed and the limiter fails open fast. Redis degrades to "no rate
+limiting", never to "down". (Throughput dips while Redis is out, since each
+request waits up to the 50 ms bound before failing open — a fine trade against a
+10-second hang.)
+
+This is the whole point of chaos testing: the bug was invisible until the
+dependency actually went away under load.
+
+## Blast radius — Postgres loss (the hard dependency)
+
+Reads are Postgres-backed, so with the DB gone they genuinely can't be served.
+The question is whether the damage is contained and self-healing.
+
+- During the outage: **throughput collapses** (~13 requests in 8 s) — DB-backed
+  reads block on the dead database (game-service has no per-query timeout).
+- **gateway crashes: 0, game-service crashes: 0** — the outage is contained; no
+  crash-loops, no cascading failure.
+- Recovery: reads return **~23 s** after the DB is back (here on an emptyDir, so
+  the schema is re-migrated by a game-service restart; a PVC-backed Postgres just
+  reconnects).
+
+**Finding / next step:** bound game-service's DB calls with a timeout, exactly as
+the rate limiter now is, so DB-backed reads fail fast instead of stalling their
+connection while Postgres is unreachable.
+
+## Autoscaling — HPA on the gateway
+
+metrics-server installed (`--kubelet-insecure-tls` for kind), HPA at 50% CPU,
+min 1 / max 5, under sustained load:
+
+| t | replicas | CPU (of 50% target) |
+|---|---|---|
+| +10 s | 1 | warming up |
+| +30 s | 4 | 1984% |
+| +50 s | 5 | 1994% |
+| +60 s | 5 (max) | 1986% |
+
+The HPA observes CPU far over target and scales to the ceiling within ~30 s —
+autoscaling that actually reacts, not just a manifest that claims to.
+
+---
+
+### Summary
+
+| Property | Verdict |
+|---|---|
+| Horizontal scaling | ✅ scales to the next bottleneck; 0 errors throughout |
+| Instance loss (replicated) | ✅ zero dropped requests |
+| Instance loss (singleton) | ✅ ~16 s automatic self-heal |
+| Rolling deploy | ✅ zero-downtime |
+| Redis outage | ✅ **after fix**: fails open in ~60 ms, 0 errors |
+| Postgres outage | ✅ contained (no crashes) + auto-recovers; ⚠️ blocks (see finding) |
+| Autoscaling | ✅ HPA scales 1→5 under load |
+
+One real bug found and fixed (Redis fail-open latency); one improvement
+identified (DB-call timeouts).

@@ -142,6 +142,11 @@ load: ## Run the load-test suite (autocannon + k6); needs `make up` running
 	@echo "\n>> WebSocket spectators (k6)"
 	k6 run -e VUS=150 -e DURATION=20s --no-usage-report load/k6/spectate.js
 
+.PHONY: chaos
+chaos: ## Run the chaos + scalability suite against the kind cluster (see load/chaos)
+	cd load && npm install --silent
+	./load/chaos/chaos.sh all
+
 ##@ Housekeeping
 
 .PHONY: clean

@@ -28,6 +28,15 @@ k6 run -e VUS=150 -e DURATION=20s load/k6/spectate.js
 
 `make load` runs all three.
 
+## Chaos & scalability
+
+`load/chaos/` goes further, on the Kubernetes (kind) deployment: it scales and
+kills components under load to measure how the platform fails and recovers —
+horizontal scaling, pod loss, zero-downtime deploys, Redis/Postgres outages, and
+HPA autoscaling. `make chaos` runs the suite; see [chaos/RESULTS.md](chaos/RESULTS.md)
+for the documented findings (including a Redis fail-open bug this testing caught
+and fixed).
+
 ## What the numbers mean
 
 While a test runs, watch **Grafana** (http://localhost:3001) and **Jaeger**
