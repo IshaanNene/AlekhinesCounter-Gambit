@@ -34,8 +34,8 @@ k6 run -e VUS=150 -e DURATION=20s load/k6/spectate.js
 kills components under load to measure how the platform fails and recovers —
 horizontal scaling, pod loss, zero-downtime deploys, Redis/Postgres outages, and
 HPA autoscaling. `make chaos` runs the suite; see [chaos/RESULTS.md](chaos/RESULTS.md)
-for the documented findings (including a Redis fail-open bug this testing caught
-and fixed).
+for the documented findings — including two dependency-timeout bugs this testing
+caught and fixed (a Redis fail-open hang and an unbounded Postgres dial).
 
 ## What the numbers mean
 

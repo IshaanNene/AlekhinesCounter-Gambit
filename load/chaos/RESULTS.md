@@ -78,22 +78,33 @@ request waits up to the 50 ms bound before failing open — a fine trade against
 This is the whole point of chaos testing: the bug was invisible until the
 dependency actually went away under load.
 
-## Blast radius — Postgres loss (the hard dependency)
+## Blast radius — Postgres loss (the hard dependency)  ⚠️ found and fixed a second issue
 
 Reads are Postgres-backed, so with the DB gone they genuinely can't be served.
 The question is whether the damage is contained and self-healing.
 
-- During the outage: **throughput collapses** (~13 requests in 8 s) — DB-backed
-  reads block on the dead database (game-service has no per-query timeout).
-- **gateway crashes: 0, game-service crashes: 0** — the outage is contained; no
-  crash-loops, no cascading failure.
-- Recovery: reads return **~23 s** after the DB is back (here on an emptyDir, so
-  the schema is re-migrated by a game-service restart; a PVC-backed Postgres just
-  reconnects).
+The first run of this experiment exposed the same class of problem as the Redis
+one: game-service dialed Postgres with no bound, so with the DB down every
+DB-backed read **stalled on the connection dial** — only ~13 requests completed
+in 8 s, each stuck connection held for the whole window.
 
-**Finding / next step:** bound game-service's DB calls with a timeout, exactly as
-the rate limiter now is, so DB-backed reads fail fast instead of stalling their
-connection while Postgres is unreachable.
+**Fix** (`pkg/store/store.go`): build the pool with `pgxpool.NewWithConfig` and
+set `ConnConfig.ConnectTimeout` (3 s) so a dead DB fails fast, plus a server-side
+`statement_timeout` (5 s) for the other failure mode — a live but slow or
+lock-blocked query. A read against a down Postgres now returns a structured error
+in ~3 s instead of hanging, and `health` stays instant (22 ms).
+
+| metric | before | after |
+|---|---|---|
+| reqs completed during 8 s outage | 13 | **42** |
+| single read latency, DB down | ~10 s (hang) | **~3 s** (clean error) |
+| gateway / game-service crashes | 0 / 0 | 0 / 0 |
+| recovery after DB returns | contained | contained, reconnects fast |
+
+The DB is a hard dependency, so reads still can't succeed while it is down — but
+now they **fail fast and free the connection** instead of stalling it, and the
+services never crash or crash-loop. (Here on an emptyDir the schema is re-migrated
+by a game-service restart; a PVC-backed Postgres just reconnects.)
 
 ## Autoscaling — HPA on the gateway
 
@@ -121,8 +132,14 @@ autoscaling that actually reacts, not just a manifest that claims to.
 | Instance loss (singleton) | ✅ ~16 s automatic self-heal |
 | Rolling deploy | ✅ zero-downtime |
 | Redis outage | ✅ **after fix**: fails open in ~60 ms, 0 errors |
-| Postgres outage | ✅ contained (no crashes) + auto-recovers; ⚠️ blocks (see finding) |
+| Postgres outage | ✅ **after fix**: fails fast in ~3 s, 0 crashes, auto-recovers |
 | Autoscaling | ✅ HPA scales 1→5 under load |
 
-One real bug found and fixed (Redis fail-open latency); one improvement
-identified (DB-call timeouts).
+Two real resilience bugs found and fixed, both of the same shape — an unbounded
+call to a dependency that turned that dependency's outage into stuck requests:
+
+- **Redis** (`pkg/redisx/ratelimit.go`): the per-request rate-limiter call had no
+  timeout, so a Redis outage hung every request ~10 s. Bounded to 50 ms.
+- **Postgres** (`pkg/store/store.go`): the connection dial had no timeout, so a DB
+  outage stalled DB-backed reads ~10 s. Bounded with a 3 s connect timeout and a
+  5 s statement timeout.

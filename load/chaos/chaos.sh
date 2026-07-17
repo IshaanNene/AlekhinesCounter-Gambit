@@ -167,7 +167,7 @@ exp_degrade_postgres() {
   echo "  [Postgres down] 8s of load…"
   local r; r=$(probe 8 40)
   local gw1 gs1; gw1=$(restarts gateway); gs1=$(restarts game-service)
-  printf "     completed %s reqs in 8s (throughput collapses — DB-backed reads block on the dead DB, no query timeout)\n" \
+  printf "     completed %s reqs in 8s — DB-backed reads now fail FAST (~3s connect-timeout) instead of stalling their connection\n" \
     "$(echo "$r" | jget served2xx)"
   printf "     gateway crashes: %d   game-service crashes: %d   →  the outage is CONTAINED — nothing crash-loops\n" \
     "$((gw1 - gw0))" "$((gs1 - gs0))"
@@ -179,7 +179,7 @@ exp_degrade_postgres() {
   wait_ready game-service
   local ms; ms=$(time_to_recover 90)
   printf "     reads back %s ms after the DB returned (a PVC-backed Postgres would just reconnect; here the schema is re-migrated)\n" "$ms"
-  printf "     finding: bound game-service DB calls with a timeout — as the rate limiter now is — so DB reads fail fast instead of stalling a connection\n"
+  printf "     the DB calls are bounded by store.connectTimeout + statement_timeout, so a dead or slow DB fails fast rather than pinning a connection\n"
   limiter_restore
 }
 

@@ -12,6 +12,20 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// Timeouts that keep a database problem from becoming a stuck request. Chaos
+// testing showed that with neither bound, an unreachable Postgres stalled every
+// DB-backed read on the connection dial — the gRPC handler behind it hung, and
+// the request's connection with it, instead of failing fast and freeing up.
+const (
+	// connectTimeout bounds establishing one connection, so a query against a
+	// down Postgres fails in seconds instead of blocking indefinitely.
+	connectTimeout = 3 * time.Second
+	// statementTimeout is a server-side per-statement cap for the other failure
+	// mode: a live but slow or lock-blocked query. Postgres itself aborts the
+	// statement, so no single request can pin a pooled connection.
+	statementTimeout = "5000" // milliseconds
+)
+
 // ErrNotFound is returned when a requested row does not exist.
 var ErrNotFound = errors.New("not found")
 
@@ -55,7 +69,16 @@ type Store struct {
 
 // Connect opens a pool against dsn and verifies connectivity.
 func Connect(ctx context.Context, dsn string) (*Store, error) {
-	pool, err := pgxpool.New(ctx, dsn)
+	cfg, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		return nil, fmt.Errorf("parse dsn: %w", err)
+	}
+	cfg.ConnConfig.ConnectTimeout = connectTimeout
+	// RuntimeParams is populated by ParseConfig; this is applied with SET on every
+	// new connection, so it covers reconnects too.
+	cfg.ConnConfig.RuntimeParams["statement_timeout"] = statementTimeout
+
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("open pool: %w", err)
 	}
