@@ -40,12 +40,31 @@ product.
 </tr>
 </table>
 
-**Observability** — RED + chess-specific metrics in Grafana, and a single move
-request traced across services in Jaeger (gateway → game-service → engine-worker):
+**Post-game analysis** — every finished game is analysed asynchronously by a
+Kafka-fed worker pool: per-side accuracy, an eval graph, blunder/mistake counts,
+engine-match rate, and RedisBloom novelty detection, all served back over GraphQL:
 
-![Grafana dashboard](docs/images/grafana.png)
+![Post-game analysis](docs/images/app-analysis.png)
+
+**Observability** — RED + chess-specific metrics in Grafana under sustained load
+(games in progress, cache hit rate, matchmaking wait, request rate absorbing a
+spike), and a single move request traced across services in Jaeger
+(gateway → game-service → engine-worker):
+
+![Grafana dashboard under load](docs/images/grafana.png)
 
 ![Jaeger distributed trace](docs/images/jaeger.png)
+
+**Platform & delivery** — the whole platform runs on Kubernetes, reconciled from
+this repo by ArgoCD (a push to `main` syncs the cluster), and every push is built,
+tested, and published to GHCR by GitHub Actions:
+
+<table>
+<tr>
+<td><img src="docs/images/argocd.png" alt="ArgoCD app tree"></td>
+<td><img src="docs/images/ci.png" alt="GitHub Actions CI"></td>
+</tr>
+</table>
 
 ## Stack
 
