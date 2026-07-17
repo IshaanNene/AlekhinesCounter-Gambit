@@ -247,10 +247,14 @@ games and the system autoscales.
 - [ ] Automated sync + rollback; environment promotion flow
 
 ### Epic 4.6 — CI (GitHub Actions)
-- [ ] Build, test, lint, vet for every service (Go + Erlang)
-- [ ] Proto codegen + drift check
-- [ ] Build + push images to registry on merge
-- [ ] Update image tags → ArgoCD picks them up
+- [x] Build, test, lint, vet (Go via lint/test jobs; the Erlang session-manager
+      is compiled in its image build)
+- [x] Proto codegen + drift check (buf lint + regenerate-and-diff)
+- [x] Build + push images to registry on merge (all six services → GHCR, SHA +
+      latest tags, gated on green lint/proto/test)
+- [~] Update image tags → ArgoCD picks them up — images are in GHCR and ArgoCD
+      watches git; the last hop (Argo Image Updater or a CI tag write-back) is the
+      cloud flow, skipped locally because kind runs host-loaded images (pull-never)
 
 ### Epic 4.7 — Metrics (Prometheus + Grafana)
 - [ ] Instrument every service with Prometheus metrics
