@@ -4,8 +4,48 @@ A distributed chess engine and platform: play chess against Stockfish or other
 humans, with moves validated, persisted, streamed live, analyzed asynchronously,
 and the whole system running on Kubernetes with full observability.
 
+![Playing the engine](docs/images/app-game.png)
+
 Built in four quarterly releases — see [ROADMAP.md](ROADMAP.md) for the plan and
 [TASKS.md](TASKS.md) for execution-level tasks.
+
+## The problem
+
+Playing chess online looks simple; the platform behind it is a full tour of
+distributed-systems engineering. Rules have to be enforced **authoritatively** on
+the server (never trust the client). Moves must persist and stream **live** to
+both players and any number of spectators. A **compute-heavy engine** has to
+analyse positions without blocking play, and finished games need **asynchronous**
+post-game analysis. Clocks must never flag-fall a decided game, ratings must
+update exactly once, and there should be anti-cheat signals for review — all while
+the system stays **available and horizontally scalable**.
+
+Most "build a chess app" projects are a single process with a chess library. This
+one is built the way a real product would be: a set of **independently scalable
+services** over gRPC and a Kafka event bus, with durable storage, live WebSocket
+fanout, full metrics/traces, and a GitOps pipeline onto Kubernetes. Chess is the
+vehicle — the point is the **production distributed system around it**, whose
+concerns are the same ones behind any real-time, multiplayer, compute-backed
+product.
+
+## Screenshots
+
+**Light & dark** — the web client is a dependency-free neumorphic UI, theme-toggled
+(it also follows your OS):
+
+<table>
+<tr>
+<td><img src="docs/images/app-light.png" alt="Light theme"></td>
+<td><img src="docs/images/app-dark.png" alt="Dark theme"></td>
+</tr>
+</table>
+
+**Observability** — RED + chess-specific metrics in Grafana, and a single move
+request traced across services in Jaeger (gateway → game-service → engine-worker):
+
+![Grafana dashboard](docs/images/grafana.png)
+
+![Jaeger distributed trace](docs/images/jaeger.png)
 
 ## Stack
 
