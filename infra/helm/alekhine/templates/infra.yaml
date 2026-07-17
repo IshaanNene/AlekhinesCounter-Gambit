@@ -1,17 +1,30 @@
 {{- /*
   Bundled infrastructure for a self-contained local cluster: Postgres, Redis
-  Stack, Kafka (KRaft), MinIO, and Jaeger, each a single-replica Deployment with
-  a matching Service named exactly as the app services address it.
+  Stack, Kafka (KRaft), MinIO, and Jaeger, each a single-replica workload with a
+  Service named exactly as the app services address it.
+
+  Two shapes, chosen per service by `persistent`:
+    - persistent: true  -> StatefulSet + a PVC (volumeClaimTemplate). Durable
+      across restarts and reschedules, with a stable identity. Kafka's KRaft
+      metadata and Postgres/MinIO data need this — an ephemeral dir left Kafka
+      crash-looping after a restart ("could not register with the controller
+      quorum") because its log kept vanishing underneath it.
+    - persistent: false -> a plain Deployment (Redis and Jaeger are caches/traces
+      here, so losing their data on restart is fine).
+
+  Every service also gets a readiness probe on its main port, so dependent app
+  services only see an endpoint once the datastore is actually accepting
+  connections — no more races where a client starts first and fails.
 
   Disabled (infra.enabled: false) when pointing at managed services (RDS,
-  ElastiCache, MSK, S3) provisioned by Terraform. No persistence here — this is
-  ephemeral cluster infra, not the source of truth for a real deployment.
+  ElastiCache, MSK, S3) provisioned by Terraform.
 */ -}}
 {{- if .Values.infra.enabled }}
 {{- range $name, $cfg := .Values.infraServices }}
+{{- $persistent := $cfg.persistent | default false }}
 ---
 apiVersion: apps/v1
-kind: Deployment
+kind: {{ if $persistent }}StatefulSet{{ else }}Deployment{{ end }}
 metadata:
   name: {{ $name }}
   labels:
@@ -19,10 +32,14 @@ metadata:
     app.kubernetes.io/component: infra
 spec:
   replicas: 1
-  # Recreate, not RollingUpdate: these are single stateful pods on an emptyDir,
-  # so two at once would fight over the same (ephemeral) data anyway.
+  {{- if $persistent }}
+  serviceName: {{ $name }}
+  {{- else }}
+  # Recreate, not RollingUpdate: a single ephemeral pod, so two at once would
+  # only fight over the same (throwaway) data.
   strategy:
     type: Recreate
+  {{- end }}
   selector:
     matchLabels:
       app.kubernetes.io/name: {{ $name }}
@@ -31,6 +48,12 @@ spec:
       labels:
         app.kubernetes.io/name: {{ $name }}
     spec:
+      {{- if $cfg.fsGroup }}
+      # The image runs as non-root; fsGroup makes the freshly-provisioned volume
+      # group-writable so the process can actually write its data dir.
+      securityContext:
+        fsGroup: {{ $cfg.fsGroup }}
+      {{- end }}
       containers:
         - name: {{ $name }}
           image: {{ $cfg.image }}
@@ -53,6 +76,20 @@ spec:
               value: {{ $v | quote }}
             {{- end }}
           {{- end }}
+          {{- if $cfg.dataDir }}
+          volumeMounts:
+            - name: data
+              mountPath: {{ $cfg.dataDir }}
+          {{- end }}
+          {{- if $cfg.ports }}
+          # Gate the Service endpoint on the port actually accepting connections.
+          readinessProbe:
+            tcpSocket:
+              port: {{ first $cfg.ports }}
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 12
+          {{- end }}
           resources:
             requests: { cpu: 50m, memory: 128Mi }
             {{- if $cfg.resources }}
@@ -61,6 +98,21 @@ spec:
             {{- else }}
             limits: { cpu: "2", memory: 1Gi }
             {{- end }}
+      {{- if and $cfg.dataDir (not $persistent) }}
+      volumes:
+        - name: data
+          emptyDir: {}
+      {{- end }}
+  {{- if $persistent }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ $cfg.storage | default "1Gi" }}
+  {{- end }}
 ---
 apiVersion: v1
 kind: Service

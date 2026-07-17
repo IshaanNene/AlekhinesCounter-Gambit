@@ -134,6 +134,13 @@ infraServices:
   kafka:
     image: apache/kafka:3.9.0
     ports: [9092]
+    # Durable KRaft log on a PVC. Without it Kafka crash-looped after any restart
+    # ("could not register with the controller quorum") because its metadata log
+    # kept vanishing; a StatefulSet gives it stable identity + storage.
+    persistent: true
+    storage: 2Gi
+    dataDir: /var/lib/kafka/data
+    fsGroup: 1000            # the apache/kafka image runs as uid 1000
     env:
       KAFKA_NODE_ID: "1"
       KAFKA_PROCESS_ROLES: "broker,controller"
@@ -148,6 +155,9 @@ infraServices:
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: "0"
       CLUSTER_ID: "alekhine-counter-gambit-01"
+      # Persist the metadata + message log to the mounted PVC, not the default
+      # ephemeral /tmp — this is the whole point of the change.
+      KAFKA_LOG_DIRS: "/var/lib/kafka/data"
       # Cap the JVM heap under the pod's memory limit, or the broker OOMKills.
       KAFKA_HEAP_OPTS: "-Xmx512m -Xms256m"
     resources:
