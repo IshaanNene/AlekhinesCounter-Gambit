@@ -1,0 +1,23 @@
+# Overrides for a local kind cluster on a laptop: one replica of everything and
+# no HPAs (kind ships no metrics-server, so an HPA would sit Unknown). Production
+# values.yaml keeps the real replica counts and autoscaling.
+global:
+  imagePullPolicy: Never   # images are kind-loaded from the host, never pulled
+
+services:
+  gateway:
+    replicas: 1
+    # Publish the gateway on a NodePort so the kind port-mapping reaches it.
+    nodePort: 30080
+    hpa: { enabled: false }
+  game-service:
+    replicas: 1
+  engine-worker:
+    replicas: 1
+    hpa: { enabled: false }
+  analysis-worker:
+    replicas: 1
+  session-manager:
+    replicas: 1
+  web:
+    replicas: 1

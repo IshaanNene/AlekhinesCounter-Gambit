@@ -106,6 +106,29 @@ logs: ## Tail stack logs
 run-game: ## Play a game vs the engine via the CLI shim
 	go run ./cmd/play
 
+##@ Kubernetes (kind)
+
+IMAGES := gateway game-service engine-worker analysis-worker session-manager web
+KIND_CLUSTER ?= alekhine
+
+.PHONY: k8s-load
+k8s-load: ## Build service images and load them into the kind cluster
+	docker compose build $(IMAGES)
+	@for svc in $(IMAGES); do \
+		echo ">> loading alekhinescounter-gambit-$$svc into kind"; \
+		kind load docker-image alekhinescounter-gambit-$$svc:latest --name $(KIND_CLUSTER); \
+	done
+
+.PHONY: k8s-deploy
+k8s-deploy: k8s-load ## Deploy the platform to the kind cluster via Helm
+	helm upgrade --install acg infra/helm/alekhine \
+		-f infra/helm/alekhine/values-kind.yaml --wait --timeout 5m
+	@echo ">> deployed. gateway on http://localhost:8088 (via the kind port map)"
+
+.PHONY: k8s-status
+k8s-status: ## Show pod status
+	kubectl get pods -o wide
+
 ##@ Load testing
 
 .PHONY: load

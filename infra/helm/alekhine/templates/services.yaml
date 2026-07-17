@@ -81,12 +81,18 @@ metadata:
   labels:
     {{- include "acg.labels" (dict "name" $name "root" $) | nindent 4 }}
 spec:
+  {{- if $svc.nodePort }}
+  type: NodePort
+  {{- end }}
   selector:
     app.kubernetes.io/name: {{ $name }}
   ports:
     - name: main
       port: {{ $svc.port }}
       targetPort: main
+      {{- if $svc.nodePort }}
+      nodePort: {{ $svc.nodePort }}
+      {{- end }}
 {{- end }}
 {{- if and $svc.hpa $svc.hpa.enabled }}
 ---

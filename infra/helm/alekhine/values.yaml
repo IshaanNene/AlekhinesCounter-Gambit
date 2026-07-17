@@ -44,6 +44,7 @@ services:
       ACG_KAFKA_BROKERS: "kafka:9092"
       ACG_S3_ENDPOINT: "minio:9000"
       ACG_RUN_MIGRATIONS: "true"
+    envFromSecret: acg-secrets
 
   engine-worker:
     image: alekhinescounter-gambit-engine-worker:latest
@@ -59,6 +60,13 @@ services:
     image: alekhinescounter-gambit-analysis-worker:latest
     replicas: 2            # scales the Kafka consumer group
     metricsPort: 9101
+    env:
+      ACG_KAFKA_BROKERS: "kafka:9092"
+      ACG_ENGINE_ADDR: "engine-worker:50052"
+      ACG_REDIS_ADDR: "redis:6379"
+      ACG_S3_ENDPOINT: "minio:9000"
+      ACG_ANALYSIS_DEPTH: "12"
+    envFromSecret: acg-secrets
 
   session-manager:
     image: alekhinescounter-gambit-session-manager:latest
@@ -70,6 +78,67 @@ services:
     replicas: 2
     port: 80
 
+# Sensitive config, injected via the acg-secrets Secret. Placeholders only —
+# override with --set or a values file in any real environment.
+secrets:
+  sessionSecret: "dev-only-secret-change-me-in-production-32b"
+  postgresDSN: "postgres://acg:acg@postgres:5432/acg?sslmode=disable"
+  s3AccessKey: "acg"
+  s3SecretKey: "acg-secret-key"
+
 # Toggle the bundled infra off when using managed services.
 infra:
   enabled: true
+
+# Bundled infra dependencies, rendered by templates/infra.yaml. Each Service is
+# named exactly as the app services address it (postgres, redis, kafka, ...).
+infraServices:
+  postgres:
+    image: postgres:16
+    ports: [5432]
+    env:
+      POSTGRES_USER: acg
+      POSTGRES_PASSWORD: acg
+      POSTGRES_DB: acg
+
+  redis:
+    image: redis/redis-stack-server:7.4.0-v1
+    ports: [6379]
+    env:
+      REDIS_ARGS: "--maxmemory 512mb --maxmemory-policy volatile-lru"
+
+  minio:
+    image: minio/minio:RELEASE.2025-04-08T15-41-24Z
+    command: ["minio", "server", "/data", "--console-address", ":9001"]
+    ports: [9000, 9001]
+    env:
+      MINIO_ROOT_USER: acg
+      MINIO_ROOT_PASSWORD: acg-secret-key
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.60
+    ports: [4317, 16686]
+    env:
+      COLLECTOR_OTLP_ENABLED: "true"
+
+  kafka:
+    image: apache/kafka:3.9.0
+    ports: [9092]
+    env:
+      KAFKA_NODE_ID: "1"
+      KAFKA_PROCESS_ROLES: "broker,controller"
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka:9093"
+      KAFKA_LISTENERS: "PLAINTEXT://:9092,CONTROLLER://:9093"
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka:9092"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"
+      KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_INTER_BROKER_LISTENER_NAME: "PLAINTEXT"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: "0"
+      CLUSTER_ID: "alekhine-counter-gambit-01"
+      # Cap the JVM heap under the pod's memory limit, or the broker OOMKills.
+      KAFKA_HEAP_OPTS: "-Xmx512m -Xms256m"
+    resources:
+      limits: { cpu: "2", memory: "1536Mi" }

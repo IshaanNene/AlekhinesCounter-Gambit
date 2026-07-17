@@ -1,0 +1,82 @@
+{{- /*
+  Bundled infrastructure for a self-contained local cluster: Postgres, Redis
+  Stack, Kafka (KRaft), MinIO, and Jaeger, each a single-replica Deployment with
+  a matching Service named exactly as the app services address it.
+
+  Disabled (infra.enabled: false) when pointing at managed services (RDS,
+  ElastiCache, MSK, S3) provisioned by Terraform. No persistence here — this is
+  ephemeral cluster infra, not the source of truth for a real deployment.
+*/ -}}
+{{- if .Values.infra.enabled }}
+{{- range $name, $cfg := .Values.infraServices }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    app.kubernetes.io/name: {{ $name }}
+    app.kubernetes.io/component: infra
+spec:
+  replicas: 1
+  # Recreate, not RollingUpdate: these are single stateful pods on an emptyDir,
+  # so two at once would fight over the same (ephemeral) data anyway.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ $name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ $name }}
+    spec:
+      containers:
+        - name: {{ $name }}
+          image: {{ $cfg.image }}
+          {{- with $cfg.args }}
+          args:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with $cfg.command }}
+          command:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            {{- range $cfg.ports }}
+            - containerPort: {{ . }}
+            {{- end }}
+          {{- with $cfg.env }}
+          env:
+            {{- range $k, $v := . }}
+            - name: {{ $k }}
+              value: {{ $v | quote }}
+            {{- end }}
+          {{- end }}
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            {{- if $cfg.resources }}
+            limits:
+              {{- toYaml $cfg.resources.limits | nindent 14 }}
+            {{- else }}
+            limits: { cpu: "2", memory: 1Gi }
+            {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    app.kubernetes.io/name: {{ $name }}
+    app.kubernetes.io/component: infra
+spec:
+  selector:
+    app.kubernetes.io/name: {{ $name }}
+  ports:
+    {{- range $cfg.ports }}
+    - name: p{{ . }}
+      port: {{ . }}
+      targetPort: {{ . }}
+    {{- end }}
+{{- end }}
+{{- end }}

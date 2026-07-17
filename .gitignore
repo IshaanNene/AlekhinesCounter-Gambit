@@ -41,3 +41,10 @@ dist/
 # Load-test deps
 load/node_modules/
 load/package-lock.json
+
+# Terraform: keep the config and lock file, drop local state, provider binaries,
+# and the generated kubeconfig (all machine-specific and/or sensitive).
+.terraform/
+*.tfstate
+*.tfstate.*
+infra/terraform/alekhine-config
