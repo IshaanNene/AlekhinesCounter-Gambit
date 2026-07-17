@@ -163,7 +163,13 @@ infraServices:
     env:
       KAFKA_NODE_ID: "1"
       KAFKA_PROCESS_ROLES: "broker,controller"
-      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka:9093"
+      # Self-reference the controller over loopback, not the Service. A fresh 3.9
+      # KRaft format enables KIP-919 controller registration, which dials this
+      # address at startup — and the readiness probe removes the pod from its own
+      # Service's endpoints until 9092 is up, so "kafka:9093" has no route and
+      # registration times out (a ~60s crash loop). localhost sidesteps the
+      # Service entirely, which is correct for a single combined node anyway.
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@localhost:9093"
       KAFKA_LISTENERS: "PLAINTEXT://:9092,CONTROLLER://:9093"
       KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka:9092"
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"
