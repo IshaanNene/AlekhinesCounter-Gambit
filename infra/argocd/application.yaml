@@ -1,0 +1,52 @@
+# The GitOps definition of the platform: ArgoCD watches this repo and keeps the
+# cluster matching infra/helm/alekhine on the main branch. This is the "apps"
+# half of the split Terraform started — Terraform owns the cluster, ArgoCD owns
+# what runs on it, with git as the single source of truth.
+#
+# Bootstrap once with `kubectl apply -f infra/argocd/application.yaml`; after
+# that every change is a git push. ArgoCD renders the Helm chart itself (it does
+# not shell out to `helm install`), tracks the resulting objects, and with the
+# sync policy below re-applies them whenever git or the cluster drifts.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: alekhine
+  namespace: argocd
+  # Keep the app resources around until ArgoCD has finished removing them if the
+  # Application itself is deleted.
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/IshaanNene/AlekhinesCounter-Gambit
+    targetRevision: main
+    path: infra/helm/alekhine
+    helm:
+      # The same overrides `make k8s-deploy` passes, so ArgoCD produces the same
+      # single-replica, kind-friendly deployment.
+      valueFiles:
+        - values-kind.yaml
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: default
+
+  syncPolicy:
+    automated:
+      # prune: delete objects that disappear from git. selfHeal: revert manual
+      # kubectl edits back to what git says — the cluster cannot drift.
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      # The chart's bundled infra has no revision history worth diffing on; this
+      # keeps the sync from failing on immutable-field or large-CRD annotations.
+      - ApplyOutOfSyncOnly=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        maxDuration: 3m
+        factor: 2

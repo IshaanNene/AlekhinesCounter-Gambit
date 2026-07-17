@@ -134,6 +134,24 @@ k8s-deploy: k8s-load ## Deploy the platform to the kind cluster via Helm
 k8s-status: ## Show pod status
 	kubectl get pods -o wide
 
+##@ GitOps (ArgoCD)
+
+ARGOCD_VERSION ?= v2.13.3
+
+.PHONY: argocd-install
+argocd-install: ## Install ArgoCD into the kind cluster
+	kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
+	kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/$(ARGOCD_VERSION)/manifests/install.yaml
+	kubectl -n argocd rollout status deploy/argocd-server --timeout=300s
+	@echo ">> ArgoCD installed. Initial admin password:"
+	@kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d; echo
+	@echo ">> UI: kubectl -n argocd port-forward svc/argocd-server 8080:443  (user: admin)"
+
+.PHONY: argocd-app
+argocd-app: ## Register the platform Application (git becomes the source of truth)
+	kubectl apply -f infra/argocd/application.yaml
+	@echo ">> registered. watch: kubectl -n argocd get applications alekhine -w"
+
 ##@ Load testing
 
 .PHONY: load
