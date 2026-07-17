@@ -119,11 +119,16 @@ k8s-load: ## Build service images and load them into the kind cluster
 		kind load docker-image alekhinescounter-gambit-$$svc:latest --name $(KIND_CLUSTER); \
 	done
 
+.PHONY: k8s-ingress
+k8s-ingress: ## Install the ingress-nginx controller on the kind cluster
+	./infra/k8s/ingress-nginx.sh
+
 .PHONY: k8s-deploy
 k8s-deploy: k8s-load ## Deploy the platform to the kind cluster via Helm
 	helm upgrade --install acg infra/helm/alekhine \
 		-f infra/helm/alekhine/values-kind.yaml --wait --timeout 5m
 	@echo ">> deployed. gateway on http://localhost:8088 (via the kind port map)"
+	@echo ">> for the ingress on http://localhost:8888, run 'make k8s-ingress' once"
 
 .PHONY: k8s-status
 k8s-status: ## Show pod status

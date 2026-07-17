@@ -33,11 +33,30 @@ resource "kind_cluster" "acg" {
     node {
       role = "control-plane"
 
+      # Label this node ingress-ready so the ingress-nginx controller (which uses
+      # a nodeSelector + hostPort in the kind deployment) schedules here and binds
+      # the node's :80. This is the standard kind ingress setup.
+      kubeadm_config_patches = [
+        <<-EOT
+        kind: InitConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            node-labels: "ingress-ready=true"
+        EOT
+      ]
+
       # Publish the gateway's NodePort to the host, so the app is reachable at
       # localhost without a separate port-forward once deployed.
       extra_port_mappings {
         container_port = 30080
         host_port      = var.gateway_host_port
+      }
+
+      # Publish the ingress controller's :80 to the host, so the ingress is
+      # reachable at http://localhost:<ingress_host_port>.
+      extra_port_mappings {
+        container_port = 80
+        host_port      = var.ingress_host_port
       }
     }
 

@@ -15,3 +15,9 @@ variable "gateway_host_port" {
   type        = number
   default     = 8088
 }
+
+variable "ingress_host_port" {
+  description = "Host port mapped to the ingress-nginx controller (container port 80)."
+  type        = number
+  default     = 8888
+}

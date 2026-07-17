@@ -12,3 +12,8 @@ output "endpoint" {
   description = "The cluster API endpoint."
   value       = kind_cluster.acg.endpoint
 }
+
+output "ingress_url" {
+  description = "Host URL mapped to the ingress-nginx controller."
+  value       = "http://localhost:${var.ingress_host_port}"
+}

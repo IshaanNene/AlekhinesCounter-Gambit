@@ -21,3 +21,11 @@ services:
     replicas: 1
   web:
     replicas: 1
+
+# The kind cluster runs an ingress-nginx controller (Terraform maps its :80 to
+# the host), so front the app with a real ingress in addition to the NodePort.
+ingress:
+  enabled: true
+  className: nginx
+  host: ""   # any host — reachable at http://localhost:<ingress_host_port>
+

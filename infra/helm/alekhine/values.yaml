@@ -86,6 +86,13 @@ secrets:
   s3AccessKey: "acg"
   s3SecretKey: "acg-secret-key"
 
+# A single ingress fronting the app (see templates/ingress.yaml). Off by default;
+# the bare NodePort covers Compose and simple setups. Needs an ingress controller.
+ingress:
+  enabled: false
+  className: nginx
+  host: ""   # empty matches any host, so http://localhost:<port> works directly
+
 # Toggle the bundled infra off when using managed services.
 infra:
   enabled: true

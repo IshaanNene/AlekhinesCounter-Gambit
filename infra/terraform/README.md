@@ -17,6 +17,12 @@ export KUBECONFIG="$(terraform output -raw kubeconfig_path)"
 
 # then deploy the apps (from the repo root)
 make k8s-deploy                 # builds images, loads them into kind, helm installs
+make k8s-ingress                # installs the ingress-nginx controller (once)
 
 terraform destroy               # tears the cluster down
 ```
+
+The cluster publishes two host ports (see `variables.tf`): the gateway NodePort
+on `gateway_host_port` (default **8088**) and the ingress-nginx controller on
+`ingress_host_port` (default **8888**). After `make k8s-ingress`, the whole app
+is reachable through the ingress at `terraform output -raw ingress_url`.

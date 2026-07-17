@@ -1,0 +1,56 @@
+{{- /*
+  One ingress fronts the whole app on a single host. Path routing splits the
+  API from the static client so each is served by the right pod directly:
+
+    /graphql , /ws  -> gateway   (GraphQL over HTTP, and the WebSocket stream)
+    /               -> web       (the static client; nginx there needs no API proxy)
+
+  ingress-nginx orders paths by specificity, so the two API prefixes win over the
+  catch-all "/". Disabled by default (ingress.enabled=false) — Compose and the
+  bare NodePort don't need it; the kind cluster turns it on.
+*/ -}}
+{{- if .Values.ingress.enabled }}
+{{- $gwPort := (index .Values.services "gateway").port }}
+{{- $webPort := (index .Values.services "web").port }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: acg
+  labels:
+    {{- include "acg.labels" (dict "name" "ingress" "root" $) | nindent 4 }}
+  annotations:
+    # Spectator WebSocket streams are long-lived; the default 60s read timeout
+    # would sever a quiet game mid-watch.
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+spec:
+  ingressClassName: {{ .Values.ingress.className | default "nginx" }}
+  rules:
+    -
+      {{- with .Values.ingress.host }}
+      host: {{ . | quote }}
+      {{- end }}
+      http:
+        paths:
+          - path: /graphql
+            pathType: Prefix
+            backend:
+              service:
+                name: gateway
+                port:
+                  number: {{ $gwPort }}
+          - path: /ws
+            pathType: Prefix
+            backend:
+              service:
+                name: gateway
+                port:
+                  number: {{ $gwPort }}
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: web
+                port:
+                  number: {{ $webPort }}
+{{- end }}
