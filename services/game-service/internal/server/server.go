@@ -58,15 +58,34 @@ func New(st *store.Store, eng *engine.Client, sess *session.Client, events *kafk
 	}
 }
 
-// recordMove feeds the move / finished-game gauges. Nil-safe so the server runs
-// without metrics.
+// Metric helpers. All nil-safe so the server runs without metrics.
+
+// gameCreated bumps the in-progress gauge.
+func (s *Server) gameCreated() {
+	if s.metrics != nil {
+		s.metrics.GamesActive.Inc()
+	}
+}
+
+// gameEnded closes out a finished game: it leaves the in-progress gauge and
+// counts the result. Called from every terminal path (checkmate, resignation).
+func (s *Server) gameEnded(result chess.Result) {
+	if s.metrics == nil {
+		return
+	}
+	s.metrics.GamesActive.Dec()
+	s.metrics.GamesFinished.WithLabelValues(resultToDB(result)).Inc()
+}
+
+// recordMove feeds the move gauge and, when the move ended the game, the
+// finished-game counters.
 func (s *Server) recordMove(ended bool, result chess.Result) {
 	if s.metrics == nil {
 		return
 	}
 	s.metrics.MovesTotal.Inc()
 	if ended {
-		s.metrics.GamesFinished.WithLabelValues(resultToDB(result)).Inc()
+		s.gameEnded(result)
 	}
 }
 
@@ -111,6 +130,7 @@ func (s *Server) CreateGame(ctx context.Context, req *gamev1.CreateGameRequest) 
 			return nil, status.Errorf(codes.Internal, "create session: %v", err)
 		}
 	}
+	s.gameCreated()
 	return &gamev1.CreateGameResponse{Game: toProtoGame(g, nil)}, nil
 }
 
@@ -285,6 +305,7 @@ func (s *Server) Resign(ctx context.Context, req *gamev1.ResignRequest) (*gamev1
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "end game: %v", err)
 	}
+	s.gameEnded(winner)
 
 	// Mirror the result into the live session so its clocks stop.
 	if !g.VsEngine && s.session.Enabled() {

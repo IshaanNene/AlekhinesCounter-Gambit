@@ -48,7 +48,6 @@ func main() {
 	defer func() { _ = tracingShutdown(context.Background()) }()
 	metricsShutdown := telemetry.ServeMetrics(config.Getenv("ACG_METRICS_ADDR", ":9101"), metrics, log)
 	defer func() { _ = metricsShutdown(context.Background()) }()
-	_ = metrics
 
 	brokers := config.Getenv("ACG_KAFKA_BROKERS", "")
 	if brokers == "" {
@@ -95,7 +94,7 @@ func main() {
 
 	// The eval cache matters most here: analysis re-walks openings every game, so
 	// most early positions are already known.
-	evalCache := redisx.NewEvalCache(rdb)
+	evalCache := redisx.NewEvalCache(rdb).WithMetrics(metrics.CacheHits, metrics.CacheMisses)
 	eng, err := engine.Dial(engineAddr, evalCache, log)
 	if err != nil {
 		log.Error("failed to dial engine-worker", "addr", engineAddr, "error", err)

@@ -78,7 +78,7 @@ local my_band = math.min(max_band, initial_band + my_wait * band_per_sec)
 local candidates = redis.call('ZRANGEBYSCORE', queue,
   elo - my_band, elo + my_band, 'WITHSCORES')
 
-local best, best_gap = nil, nil
+local best, best_gap, best_since = nil, nil, nil
 for i = 1, #candidates, 2 do
   local other = candidates[i]
   local other_elo = tonumber(candidates[i + 1])
@@ -89,7 +89,7 @@ for i = 1, #candidates, 2 do
     local other_band = math.min(max_band, initial_band + other_wait * band_per_sec)
     local gap = math.abs(other_elo - elo)
     if gap <= other_band and (best_gap == nil or gap < best_gap) then
-      best, best_gap = other, gap
+      best, best_gap, best_since = other, gap, other_since
     end
   end
 end
@@ -97,7 +97,9 @@ end
 if best then
   redis.call('ZREM', queue, best, me)
   redis.call('HDEL', since, best, me)
-  return best
+  -- Return the opponent and how long they had been waiting (ms), so the caller
+  -- can record the pairing latency.
+  return {best, best_since or now}
 end
 
 -- No opponent: wait, remembering when we started so the band can widen.
@@ -107,14 +109,16 @@ return false
 `)
 
 // Enqueue looks for an opponent, joining the queue if none is available.
-// Returns the opponent's id and true when paired.
-func (m *Matchmaking) Enqueue(ctx context.Context, userID string, elo int, timeControl string) (string, bool, error) {
+// Returns the opponent's id, true when paired, and how long the paired opponent
+// had been waiting (zero when not paired).
+func (m *Matchmaking) Enqueue(ctx context.Context, userID string, elo int, timeControl string) (string, bool, time.Duration, error) {
 	if !m.Enabled() {
-		return "", false, nil
+		return "", false, 0, nil
 	}
+	now := time.Now().UnixMilli()
 	res, err := tryPair.Run(ctx, m.client,
 		[]string{queueKey(timeControl), waitKey(timeControl)},
-		userID, elo, time.Now().UnixMilli(), initialBand, bandPerSec, maxBand,
+		userID, elo, now, initialBand, bandPerSec, maxBand,
 	).Result()
 
 	// Lua `false` arrives as a nil reply, which go-redis reports as redis.Nil —
@@ -124,17 +128,27 @@ func (m *Matchmaking) Enqueue(ctx context.Context, userID string, elo int, timeC
 		// Expire the queue so a crashed process cannot strand players in it.
 		m.client.Expire(ctx, queueKey(timeControl), queueTTL)
 		m.client.Expire(ctx, waitKey(timeControl), queueTTL)
-		return "", false, nil
+		return "", false, 0, nil
 	}
 	if err != nil {
-		return "", false, fmt.Errorf("matchmaking enqueue: %w", err)
+		return "", false, 0, fmt.Errorf("matchmaking enqueue: %w", err)
 	}
 
-	opponent, ok := res.(string)
-	if !ok || opponent == "" {
-		return "", false, nil
+	// Paired: the script returns {opponentID, opponentSinceMs}.
+	tuple, ok := res.([]interface{})
+	if !ok || len(tuple) < 2 {
+		return "", false, 0, nil
 	}
-	return opponent, true, nil
+	opponent, _ := tuple[0].(string)
+	if opponent == "" {
+		return "", false, 0, nil
+	}
+	sinceMs, _ := tuple[1].(int64)
+	wait := time.Duration(0)
+	if sinceMs > 0 && now > sinceMs {
+		wait = time.Duration(now-sinceMs) * time.Millisecond
+	}
+	return opponent, true, wait, nil
 }
 
 // Leave removes a player from the queue (cancelled, or disconnected).

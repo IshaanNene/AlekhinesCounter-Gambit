@@ -21,7 +21,7 @@ func TestMatchmakingPairsTwoPlayers(t *testing.T) {
 	t.Cleanup(func() { m.client.Del(ctx, queueKey(tc), waitKey(tc)) })
 
 	// First player finds nobody and waits.
-	opp, paired, err := m.Enqueue(ctx, "alice", 1200, tc)
+	opp, paired, _, err := m.Enqueue(ctx, "alice", 1200, tc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -30,7 +30,7 @@ func TestMatchmakingPairsTwoPlayers(t *testing.T) {
 	}
 
 	// Second player, similar rating, pairs with the first.
-	opp, paired, err = m.Enqueue(ctx, "bob", 1220, tc)
+	opp, paired, _, err = m.Enqueue(ctx, "bob", 1220, tc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,10 +53,10 @@ func TestMatchmakingRefusesDistantRatings(t *testing.T) {
 	tc := uniqueTC(t)
 	t.Cleanup(func() { m.client.Del(ctx, queueKey(tc), waitKey(tc)) })
 
-	if _, paired, _ := m.Enqueue(ctx, "beginner", 900, tc); paired {
+	if _, paired, _, _ := m.Enqueue(ctx, "beginner", 900, tc); paired {
 		t.Fatal("first player cannot pair with an empty queue")
 	}
-	_, paired, err := m.Enqueue(ctx, "master", 2400, tc)
+	_, paired, _, err := m.Enqueue(ctx, "master", 2400, tc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,14 +80,14 @@ func TestMatchmakingPicksNearestRating(t *testing.T) {
 	// correct behaviour, just not what this test is measuring).
 	//   far  1280 → 80 from seeker
 	//   near 1130 → 70 from seeker, and 150 from far, so the two do not pair.
-	if _, paired, _ := m.Enqueue(ctx, "far", 1280, tc); paired {
+	if _, paired, _, _ := m.Enqueue(ctx, "far", 1280, tc); paired {
 		t.Fatal("far should find an empty queue")
 	}
-	if _, paired, _ := m.Enqueue(ctx, "near", 1130, tc); paired {
+	if _, paired, _, _ := m.Enqueue(ctx, "near", 1130, tc); paired {
 		t.Fatal("near and far are 150 apart and must not pair")
 	}
 
-	opp, paired, err := m.Enqueue(ctx, "seeker", 1200, tc)
+	opp, paired, _, err := m.Enqueue(ctx, "seeker", 1200, tc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,7 +110,7 @@ func TestMatchmakingLeaveRemovesPlayer(t *testing.T) {
 		t.Errorf("queue depth = %d after leaving, want 0", n)
 	}
 	// Someone else must not then pair with the departed player.
-	if _, paired, _ := m.Enqueue(ctx, "other", 1500, tc); paired {
+	if _, paired, _, _ := m.Enqueue(ctx, "other", 1500, tc); paired {
 		t.Error("paired with a player who left the queue")
 	}
 }
@@ -134,7 +134,7 @@ func TestMatchmakingIsAtomicUnderConcurrency(t *testing.T) {
 			defer wg.Done()
 			me := fmt.Sprintf("p%02d", i)
 			// All within one band, so everyone is a valid opponent for everyone.
-			opp, paired, err := m.Enqueue(ctx, me, 1500, tc)
+			opp, paired, _, err := m.Enqueue(ctx, me, 1500, tc)
 			if err != nil {
 				t.Errorf("enqueue %s: %v", me, err)
 				return
@@ -180,7 +180,7 @@ func TestMatchmakingSeparatesTimeControls(t *testing.T) {
 
 	m.Enqueue(ctx, "blitzer", 1500, blitz)
 	// Same rating, different time control: must not be pulled into the blitz game.
-	if _, paired, _ := m.Enqueue(ctx, "classicist", 1500, classical); paired {
+	if _, paired, _, _ := m.Enqueue(ctx, "classicist", 1500, classical); paired {
 		t.Error("players on different time controls must not be paired")
 	}
 }
@@ -190,7 +190,7 @@ func TestNilMatchmakingDegrades(t *testing.T) {
 	if m.Enabled() {
 		t.Error("nil client should report disabled")
 	}
-	if _, paired, err := m.Enqueue(context.Background(), "x", 1200, "tc"); paired || err != nil {
+	if _, paired, _, err := m.Enqueue(context.Background(), "x", 1200, "tc"); paired || err != nil {
 		t.Errorf("disabled matchmaking should no-op, got paired=%v err=%v", paired, err)
 	}
 }

@@ -28,21 +28,50 @@ type Eval struct {
 	PV       []string `json:"pv,omitempty"`
 }
 
+// Counter is the minimal metric sink the cache reports to. prometheus.Counter
+// satisfies it, but the cache stays decoupled from any particular metrics library.
+type Counter interface{ Inc() }
+
 // EvalCache is a position→evaluation cache keyed by FEN and search depth.
 //
 // Chess is unusually well suited to this: openings and common middlegames recur
 // constantly across games, and evaluating a position is expensive while looking
 // it up is not. A nil cache is valid and simply never hits.
 type EvalCache struct {
-	client *redis.Client
-	hits   atomic.Int64
-	misses atomic.Int64
-	errs   atomic.Int64
+	client  *redis.Client
+	hits    atomic.Int64
+	misses  atomic.Int64
+	errs    atomic.Int64
+	hitCtr  Counter // optional Prometheus counters; nil when unset
+	missCtr Counter
 }
 
 // NewEvalCache builds a cache. A nil client disables it.
 func NewEvalCache(client *redis.Client) *EvalCache {
 	return &EvalCache{client: client}
+}
+
+// WithMetrics attaches hit/miss counters (e.g. Prometheus) so cache activity is
+// scrapeable, not just visible in logs. Chainable and nil-safe.
+func (c *EvalCache) WithMetrics(hits, misses Counter) *EvalCache {
+	if c != nil {
+		c.hitCtr, c.missCtr = hits, misses
+	}
+	return c
+}
+
+func (c *EvalCache) recordHit() {
+	c.hits.Add(1)
+	if c.hitCtr != nil {
+		c.hitCtr.Inc()
+	}
+}
+
+func (c *EvalCache) recordMiss() {
+	c.misses.Add(1)
+	if c.missCtr != nil {
+		c.missCtr.Inc()
+	}
 }
 
 // Enabled reports whether a Redis client is attached.
@@ -64,22 +93,22 @@ func (c *EvalCache) Get(ctx context.Context, fen string, depth uint32) (*Eval, b
 	}
 	raw, err := c.client.Get(ctx, evalKey(fen, depth)).Bytes()
 	if errors.Is(err, redis.Nil) {
-		c.misses.Add(1)
+		c.recordMiss()
 		return nil, false
 	}
 	if err != nil {
 		c.errs.Add(1)
-		c.misses.Add(1)
+		c.recordMiss()
 		return nil, false
 	}
 	var e Eval
 	if err := json.Unmarshal(raw, &e); err != nil {
 		// A corrupt entry is worse than none: drop it and treat as a miss.
 		c.client.Del(ctx, evalKey(fen, depth))
-		c.misses.Add(1)
+		c.recordMiss()
 		return nil, false
 	}
-	c.hits.Add(1)
+	c.recordHit()
 	return &e, true
 }
 

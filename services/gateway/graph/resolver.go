@@ -4,6 +4,7 @@ import (
 	"log/slog"
 
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/redisx"
+	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/telemetry"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/services/gateway/internal/auth"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/services/gateway/internal/pubsub"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/services/gateway/internal/upstream"
@@ -20,5 +21,7 @@ type Resolver struct {
 	Signer   *auth.Signer
 	// Matchmaking pairs waiting players. May be disabled when Redis is absent.
 	Matchmaking *redisx.Matchmaking
-	Log         *slog.Logger
+	// Metrics records platform gauges (e.g. matchmaking wait). May be nil.
+	Metrics *telemetry.Metrics
+	Log     *slog.Logger
 }

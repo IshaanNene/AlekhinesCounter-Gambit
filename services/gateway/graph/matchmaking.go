@@ -44,7 +44,7 @@ func (r *Resolver) enterQueue(ctx context.Context, input model.QueueInput) (*mod
 	elo := int(user.GetUser().GetElo())
 	tc := timeControlKey(input)
 
-	opponent, paired, err := r.Matchmaking.Enqueue(ctx, id.UserID, elo, tc)
+	opponent, paired, wait, err := r.Matchmaking.Enqueue(ctx, id.UserID, elo, tc)
 	if err != nil {
 		return nil, err
 	}
@@ -52,6 +52,11 @@ func (r *Resolver) enterQueue(ctx context.Context, input model.QueueInput) (*mod
 
 	if !paired {
 		return &model.QueueTicket{Matched: false, QueueDepth: int(depth)}, nil
+	}
+
+	// Record how long the paired opponent waited — the queue-to-game latency.
+	if r.Metrics != nil {
+		r.Metrics.MatchmakingWait.Observe(wait.Seconds())
 	}
 
 	// Paired: whoever arrived second creates the game.
@@ -71,7 +76,7 @@ func (r *Resolver) enterQueue(ctx context.Context, input model.QueueInput) (*mod
 	if err != nil {
 		// Put the opponent back rather than stranding them: they are no longer in
 		// the queue (the pairing script removed both) and have no game either.
-		if _, _, reErr := r.Matchmaking.Enqueue(ctx, opponent, elo, tc); reErr != nil {
+		if _, _, _, reErr := r.Matchmaking.Enqueue(ctx, opponent, elo, tc); reErr != nil {
 			r.Log.Error("could not requeue opponent after a failed pairing",
 				"opponent", opponent, "error", reErr)
 		}

@@ -110,6 +110,7 @@ func main() {
 		Bus:         bus,
 		Signer:      signer,
 		Matchmaking: redisx.NewMatchmaking(rdb),
+		Metrics:     metrics,
 		Log:         log,
 	}, signer)
 

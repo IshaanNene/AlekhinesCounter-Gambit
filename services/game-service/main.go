@@ -102,7 +102,7 @@ func main() {
 	if rdb != nil {
 		defer rdb.Close()
 	}
-	evalCache := redisx.NewEvalCache(rdb)
+	evalCache := redisx.NewEvalCache(rdb).WithMetrics(metrics.CacheHits, metrics.CacheMisses)
 
 	eng, err := engine.Dial(engineAddr, evalCache, log)
 	if err != nil {
