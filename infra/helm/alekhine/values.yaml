@@ -106,10 +106,18 @@ infraServices:
   postgres:
     image: postgres:16
     ports: [5432]
+    # The source of truth — genuinely persistent, on a PVC that survives restarts
+    # and reschedules. PGDATA is a subdirectory of the mount, the standard way to
+    # avoid initdb tripping over the volume's root directory.
+    persistent: true
+    storage: 1Gi
+    dataDir: /var/lib/postgresql/data
+    fsGroup: 999            # the postgres image runs as uid 999
     env:
       POSTGRES_USER: acg
       POSTGRES_PASSWORD: acg
       POSTGRES_DB: acg
+      PGDATA: /var/lib/postgresql/data/pgdata
 
   redis:
     image: redis/redis-stack-server:7.4.0-v1
@@ -121,6 +129,10 @@ infraServices:
     image: minio/minio:RELEASE.2025-04-08T15-41-24Z
     command: ["minio", "server", "/data", "--console-address", ":9001"]
     ports: [9000, 9001]
+    # Durable archives (PGN, analysis JSON, opening book) on a PVC.
+    persistent: true
+    storage: 2Gi
+    dataDir: /data
     env:
       MINIO_ROOT_USER: acg
       MINIO_ROOT_PASSWORD: acg-secret-key
@@ -134,13 +146,20 @@ infraServices:
   kafka:
     image: apache/kafka:3.9.0
     ports: [9092]
-    # Durable KRaft log on a PVC. Without it Kafka crash-looped after any restart
-    # ("could not register with the controller quorum") because its metadata log
-    # kept vanishing; a StatefulSet gives it stable identity + storage.
-    persistent: true
-    storage: 2Gi
+    # Kafka here is a transient event bus, not a source of truth (Postgres is), so
+    # it is deliberately disposable rather than durable. Single-node KRaft cannot
+    # recover its persisted metadata log on restart — the broker hangs forever
+    # waiting for a controller stuck re-electing itself — so each container start
+    # wipes the log dir and formats fresh. That trades a few in-flight events on a
+    # restart (games are re-analysable) for a bus that always comes back up.
     dataDir: /var/lib/kafka/data
     fsGroup: 1000            # the apache/kafka image runs as uid 1000
+    command:
+      - /bin/sh
+      - -c
+      - >
+        rm -rf /var/lib/kafka/data/* /var/lib/kafka/data/.[!.]* 2>/dev/null || true;
+        exec /__cacert_entrypoint.sh /etc/kafka/docker/run
     env:
       KAFKA_NODE_ID: "1"
       KAFKA_PROCESS_ROLES: "broker,controller"
