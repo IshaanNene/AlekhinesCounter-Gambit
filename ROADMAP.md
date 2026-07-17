@@ -219,32 +219,40 @@ live request crossing every service → k6 load test drives thousands of concurr
 games and the system autoscales.
 
 ### Epic 4.1 — Containerization & Kubernetes
-- [ ] Production Dockerfiles for every service (multi-stage, slim)
-- [ ] Kubernetes manifests: Deployments, Services, ConfigMaps, Secrets
-- [ ] HorizontalPodAutoscalers (esp. engine workers)
-- [ ] Liveness/readiness probes, resource requests/limits
-- [ ] StatefulSets for Postgres/Kafka/MinIO (or managed equivalents)
+- [x] Production Dockerfiles for every service (all six multi-stage → slim runtimes)
+- [x] Kubernetes manifests: Deployments, Services, Secrets (templated by the chart)
+- [x] HorizontalPodAutoscalers (engine-worker 3→12 on CPU; verified scaling 1→5 live)
+- [x] Liveness/readiness probes, resource requests/limits (app + bundled infra)
+- [x] StatefulSets + PVCs for Postgres and MinIO; Kafka is a deliberately disposable
+      Deployment (single-node KRaft can't recover its log on restart — see the k8s fix)
 
 ### Epic 4.2 — Helm
-- [ ] Chart per service + an umbrella chart for the platform
-- [ ] Values files for local / staging / prod
-- [ ] Templated config, secrets, image tags
+- [~] One umbrella chart templates every service from values (deliberately not a
+      subchart-per-service — overkill at this scale)
+- [~] Values files: base + values-kind (local). staging/prod overlays not built
+      (no cloud target yet)
+- [x] Templated config, secrets, image tags (secret.yaml, global.imageRegistry)
 
 ### Epic 4.3 — Terraform
-- [ ] Provision cluster (kind/k3d for local; EKS/GKE module for cloud)
-- [ ] Managed Postgres, Redis, object storage (or in-cluster via TF)
-- [ ] Networking, DNS, IAM, TLS certs
-- [ ] Remote state + workspaces per environment
+- [x] Provision cluster — kind, via tehcyx/kind (with ingress + NodePort host maps).
+      EKS/GKE is the documented swap point in main.tf; module not built (no cloud target)
+- [~] In-cluster Postgres/Redis/MinIO — provisioned by the chart, not TF (TF owns the
+      cluster; a cloud build would add RDS/ElastiCache/S3 modules)
+- [ ] Networking, DNS, IAM, TLS certs — cloud-only, not applicable to local kind
+- [ ] Remote state + workspaces per environment — local state (single environment)
 
 ### Epic 4.4 — Ingress & routing (NGINX)
-- [ ] NGINX ingress controller
-- [ ] Route HTTP/GraphQL + WebSocket upgrade traffic
-- [ ] TLS termination, rate limiting at the edge
+- [x] ingress-nginx controller (pinned, pinned to the ingress-ready node on kind)
+- [x] Route HTTP/GraphQL + WebSocket upgrade traffic (path-routed; long ws timeouts)
+- [~] Rate limiting is enforced at the gateway (token bucket, Redis). Edge TLS not
+      terminated locally (plain HTTP on localhost); a cloud build adds cert-manager
 
 ### Epic 4.5 — GitOps CD (ArgoCD)
-- [ ] ArgoCD installed, watching the infra repo
-- [ ] App-of-apps pattern for all services
-- [ ] Automated sync + rollback; environment promotion flow
+- [x] ArgoCD installed, watching this repo (renders the Helm chart from main)
+- [~] Single Application for the platform (the chart already fans out to every
+      service; an app-of-apps buys nothing until there are multiple charts)
+- [~] Automated sync + self-heal + prune (verified reverting drift in ~5s); Argo
+      keeps rollback history. Multi-env promotion not built (single environment)
 
 ### Epic 4.6 — CI (GitHub Actions)
 - [x] Build, test, lint, vet (Go via lint/test jobs; the Erlang session-manager
@@ -257,25 +265,38 @@ games and the system autoscales.
       cloud flow, skipped locally because kind runs host-loaded images (pull-never)
 
 ### Epic 4.7 — Metrics (Prometheus + Grafana)
-- [ ] Instrument every service with Prometheus metrics
-- [ ] RED/USE dashboards + chess-specific panels (games/sec, eval latency, queue depth)
-- [ ] Alerting rules (worker saturation, Kafka lag, error rates)
+- [x] Prometheus metrics on every Go service — gateway, game-service, engine-worker,
+      analysis-worker (RED via a shared interceptor + chess-specific counters). The
+      Erlang session-manager is the one exception (no Prometheus client wired)
+- [x] RED + chess dashboard auto-provisioned into Grafana (request rate, error ratio,
+      p95 latency; games active, eval-cache hit rate, matchmaking wait, moves/sec,
+      engine analyses/sec, results)
+- [x] Alerting rules (RPC error rate > 5%; analyses stalled while games finish)
 
 ### Epic 4.8 — Tracing (Jaeger + OpenTelemetry)
-- [ ] OTel SDK in each service; propagate context across gRPC/Kafka/WS
-- [ ] Export spans to Jaeger
-- [ ] Trace a full request: gateway → game service → session mgr → engine worker
+- [x] OTel SDK in every Go service; context propagated across gRPC via otelgrpc
+      (client + server handlers). Kafka-header and WS propagation not wired
+- [x] Export spans to Jaeger (OTLP)
+- [x] Trace a full request across gateway → game-service → engine-worker (all now
+      otelgrpc-instrumented; the Erlang session-manager is not in the span tree)
 
-### Epic 4.9 — Load testing (autocannon + k6)
+### Epic 4.9 — Load & chaos testing (autocannon + k6)
 - [x] autocannon suite hammering the GraphQL API (~18.8k req/s reads; limiter shields a 30k flood)
 - [x] k6 scenarios: full game flow (move p95 15ms) + WebSocket spectators (150 VUs, 0 failures)
 - [x] Baselines documented in load/README.md
+- [x] Chaos suite (load/chaos): scale-out, pod-kill recovery, zero-downtime rollout,
+      Redis/Postgres degradation, HPA — found and fixed two real dependency-timeout
+      bugs (see load/chaos/RESULTS.md)
 
 ### Epic 4.10 — Hardening & polish
-- [ ] Graceful shutdown / draining across services
-- [ ] Secrets management, network policies
-- [ ] Runbook + architecture docs finalized
-- [ ] Demo script + screenshots/GIFs for the resume/README
+- [x] Graceful shutdown across services (Go: signal context + gRPC GracefulStop /
+      HTTP Shutdown; Erlang: OTP supervision tree)
+- [~] Secrets via a Helm Secret + envFromSecret; network policies not added (kind's
+      default CNI does not enforce them — a cloud CNI like Cilium would)
+- [~] Architecture + decisions in docs/adr (0001 architecture, 0002 Redis, 0003
+      fair-play) and the README; a single consolidated runbook not written
+- [~] Screenshots captured throughout (light/dark UI, Grafana dashboard, chaos runs);
+      no polished GIF reel yet
 
 **Exit criteria:** the full architecture diagram is live in Kubernetes via
 ArgoCD, observable in Grafana + Jaeger, and survives a k6 load test with
