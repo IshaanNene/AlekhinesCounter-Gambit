@@ -12,9 +12,24 @@ start_link() ->
 
 init([]) ->
     SupFlags = #{strategy => one_for_one, intensity => 10, period => 10},
+    %% Registry (adds this node to the syn scope) and checkpoint (connects Redis)
+    %% must be up before any game starts, since a game registers and checkpoints
+    %% itself in init. sm_cluster keeps the node connected to its peers.
     Registry = #{
         id => sm_registry,
         start => {sm_registry, start_link, []},
+        restart => permanent,
+        type => worker
+    },
+    Cluster = #{
+        id => sm_cluster,
+        start => {sm_cluster, start_link, []},
+        restart => permanent,
+        type => worker
+    },
+    Checkpoint = #{
+        id => sm_checkpoint,
+        start => {sm_checkpoint, start_link, []},
         restart => permanent,
         type => worker
     },
@@ -24,4 +39,4 @@ init([]) ->
         restart => permanent,
         type => supervisor
     },
-    {ok, {SupFlags, [Registry, GameSup]}}.
+    {ok, {SupFlags, [Registry, Cluster, Checkpoint, GameSup]}}.

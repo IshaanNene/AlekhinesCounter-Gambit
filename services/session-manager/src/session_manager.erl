@@ -23,7 +23,9 @@
 %% (default 300000), `increment_ms' (default 0), `grace_ms' (default 30000).
 -spec create_game(binary(), map()) -> {ok, pid()} | {error, term()}.
 create_game(GameId, Opts) ->
-    sm_game_sup:start_game(GameId, Opts).
+    %% Start the game on the node that owns its id, so games are sharded across
+    %% the cluster rather than piling onto whichever replica took the request.
+    on_owner(GameId, fun sm_game_sup:start_game/2, [GameId, Opts]).
 
 -spec join(binary(), term()) -> ok | {error, term()}.
 join(GameId, PlayerId) -> call(GameId, {join, PlayerId}).
@@ -60,8 +62,65 @@ list_games() -> sm_registry:all().
 
 %%% internal
 
+%% call resolves a game id to its process and forwards Msg. gen_server:call is
+%% location-transparent, so the process may live on another node. Two things make
+%% this survive a node death:
+%%
+%%   * if the id resolves to nothing, the game may have gone down with its owner —
+%%     we ask the (new) owner to restore it from its checkpoint and forward;
+%%   * if the call races the owner's death and hits a dead pid, we fall back to
+%%     the same restore path rather than surfacing the failure.
 call(GameId, Msg) ->
     case sm_registry:whereis_game(GameId) of
-        undefined -> {error, no_such_game};
-        Pid -> gen_server:call(Pid, Msg)
+        undefined -> call_via_restore(GameId, Msg);
+        Pid -> safe_call(GameId, Pid, Msg)
+    end.
+
+safe_call(GameId, Pid, Msg) ->
+    try
+        gen_server:call(Pid, Msg)
+    catch
+        %% Process or its node vanished between lookup and call — re-home and retry.
+        exit:_ -> call_via_restore(GameId, Msg)
+    end.
+
+call_via_restore(GameId, Msg) ->
+    case restore(GameId) of
+        {ok, Pid} -> gen_server:call(Pid, Msg);
+        {error, no_such_game} -> {error, no_such_game}
+    end.
+
+%% restore asks the id's owner to bring the game back from its checkpoint,
+%% tolerating a concurrent restore that already won the registration.
+restore(GameId) ->
+    case on_owner(GameId, fun sm_game_sup:ensure_game/1, [GameId]) of
+        {ok, Pid} ->
+            {ok, Pid};
+        {error, {already_started, Pid}} ->
+            {ok, Pid};
+        {error, already_registered} ->
+            case sm_registry:whereis_game(GameId) of
+                undefined -> {error, no_such_game};
+                Pid -> {ok, Pid}
+            end;
+        _ ->
+            {error, no_such_game}
+    end.
+
+%% on_owner runs {Fun, Args} on the node that owns GameId: locally when that is
+%% this node, otherwise over Erlang RPC. A dead/unreachable owner is reported as a
+%% plain error, which the callers above map onto no_such_game.
+on_owner(GameId, Fun, Args) ->
+    case sm_cluster:owner(GameId) of
+        undefined ->
+            {error, no_owner};
+        Owner when Owner =:= node() ->
+            apply(Fun, Args);
+        Owner ->
+            try
+                erpc:call(Owner, erlang, apply, [Fun, Args])
+            catch
+                error:{erpc, _} = Reason -> {error, Reason};
+                Class:CReason -> {error, {Class, CReason}}
+            end
     end.

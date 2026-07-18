@@ -44,6 +44,14 @@ spec:
           env:
             - name: ACG_OTLP_ENDPOINT
               value: {{ $.Values.global.otlpEndpoint | quote }}
+            {{- /* Downward-API vars first, so plain env values below can
+                   reference them (e.g. ACG_NODE_NAME: "...@$(POD_IP)"). */}}
+            {{- range $ename, $fpath := $svc.envFieldRef }}
+            - name: {{ $ename }}
+              valueFrom:
+                fieldRef:
+                  fieldPath: {{ $fpath }}
+            {{- end }}
             {{- if $svc.metricsPort }}
             - name: ACG_METRICS_ADDR
               value: ":{{ $svc.metricsPort }}"
@@ -93,6 +101,31 @@ spec:
       {{- if $svc.nodePort }}
       nodePort: {{ $svc.nodePort }}
       {{- end }}
+{{- end }}
+{{- if $svc.clustered }}
+---
+# Headless Service: its A records are every pod IP, which is how a clustered
+# service (the Erlang session-manager) discovers its peers via DNS. Not-ready
+# addresses are published so nodes can find each other before readiness — a node
+# can be healthy for clustering before it has taken traffic.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}-headless
+  labels:
+    {{- include "acg.labels" (dict "name" $name "root" $) | nindent 4 }}
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    app.kubernetes.io/name: {{ $name }}
+  ports:
+    - name: epmd
+      port: 4369
+      targetPort: 4369
+    - name: dist
+      port: 9100
+      targetPort: 9100
 {{- end }}
 {{- if and $svc.hpa $svc.hpa.enabled }}
 ---
