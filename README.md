@@ -4,7 +4,9 @@ A distributed chess engine and platform: play chess against Stockfish or other
 humans, with moves validated, persisted, streamed live, analyzed asynchronously,
 and the whole system running on Kubernetes with full observability.
 
-![Playing the engine](docs/images/app-game.png)
+![Demo: playing a game against the engine, then the Grafana dashboard reacting to load](docs/images/demo.gif)
+
+<sub>Playing Stockfish in the browser, then the platform's Grafana dashboard reacting live to load — games in progress, cache hit rate, and request rate absorbing a spike. (Recording; see [Screenshots](#screenshots) for stills.)</sub>
 
 Built in four quarterly releases — see [ROADMAP.md](ROADMAP.md) for the plan and
 [TASKS.md](TASKS.md) for execution-level tasks.
@@ -29,6 +31,10 @@ concerns are the same ones behind any real-time, multiplayer, compute-backed
 product.
 
 ## Screenshots
+
+**In play** — a game against Stockfish, with the live opening explorer and move list:
+
+![Playing the engine](docs/images/app-game.png)
 
 **Light & dark** — the web client is a dependency-free neumorphic UI, theme-toggled
 (it also follows your OS):
