@@ -108,7 +108,7 @@ run-game: ## Play a game vs the engine via the CLI shim
 
 ##@ Kubernetes (kind)
 
-IMAGES := gateway game-service engine-worker analysis-worker session-manager web
+IMAGES := gateway game-service engine-worker analysis-worker session-manager fanout web
 KIND_CLUSTER ?= alekhine
 
 .PHONY: k8s-load

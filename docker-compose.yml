@@ -208,8 +208,27 @@ services:
       session-manager:
         condition: service_started
 
+  # Spectator fanout: tails the per-game move-event streams game-service publishes
+  # and broadcasts each move to everyone watching that game over WebSocket, with
+  # one Redis reader per game regardless of crowd size. Holds no state; scales on
+  # its own. `docker compose up --scale fanout=3` runs three behind the Service.
+  fanout:
+    build:
+      context: .
+      dockerfile: services/fanout/Dockerfile
+    environment:
+      ACG_FANOUT_ADDR: ":8090"
+      ACG_REDIS_ADDR: "redis:6379"
+      ACG_METRICS_ADDR: ":9101"
+    ports:
+      - "8090:8090"
+    depends_on:
+      redis:
+        condition: service_healthy
+
   # Static web client, fronted by NGINX which also proxies /graphql and /ws to
-  # the gateway so the browser only ever talks to one origin.
+  # the gateway, and /spectate to the fanout tier, so the browser only ever talks
+  # to one origin.
   web:
     build:
       context: .
@@ -218,6 +237,8 @@ services:
       - "3000:80"
     depends_on:
       gateway:
+        condition: service_started
+      fanout:
         condition: service_started
 
   # ── Observability ────────────────────────────────────────────────────────

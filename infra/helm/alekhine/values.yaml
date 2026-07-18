@@ -95,6 +95,20 @@ services:
       maxReplicas: 8
       targetCPUUtilizationPercentage: 75
 
+  fanout:
+    image: alekhinescounter-gambit-fanout:latest
+    replicas: 2            # scalable spectator fanout; add replicas as viewers grow
+    port: 8090
+    metricsPort: 9101
+    env:
+      ACG_FANOUT_ADDR: ":8090"
+      ACG_REDIS_ADDR: "redis:6379"
+    hpa:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 10
+      targetCPUUtilizationPercentage: 70
+
   web:
     image: alekhinescounter-gambit-web:latest
     replicas: 2

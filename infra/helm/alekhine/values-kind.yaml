@@ -22,6 +22,9 @@ services:
     # games and watch them re-home onto the other (see load/chaos).
     replicas: 2
     hpa: { enabled: false }   # kind ships no metrics-server
+  fanout:
+    replicas: 1
+    hpa: { enabled: false }
   web:
     replicas: 1
 
