@@ -80,7 +80,11 @@ func dialWS(t *testing.T, url string) *websocket.Conn {
 	wsURL := "ws" + strings.TrimPrefix(url, "http")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	c, _, err := websocket.Dial(ctx, wsURL, nil)
+	c, resp, err := websocket.Dial(ctx, wsURL, nil)
+	if resp != nil && resp.Body != nil {
+		// nil on a successful upgrade; a real body to drain on a failed one.
+		defer resp.Body.Close()
+	}
 	if err != nil {
 		t.Fatalf("ws dial: %v", err)
 	}

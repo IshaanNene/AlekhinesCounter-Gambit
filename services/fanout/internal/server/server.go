@@ -66,7 +66,7 @@ func (s *Server) handleSpectate(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return // Accept already wrote the response
 	}
-	defer c.CloseNow()
+	defer func() { _ = c.CloseNow() }()
 
 	// CloseRead handles pings/close frames and gives us a context that is
 	// cancelled the moment the spectator disconnects.
