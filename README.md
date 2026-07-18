@@ -74,10 +74,10 @@ tested, and published to GHCR by GitHub Actions:
 
 ## Stack
 
-Go · Erlang/OTP · gRPC + Protocol Buffers · GraphQL · WebSockets · PostgreSQL ·
-Redis · Kafka · MinIO · Stockfish/UCI · Docker · Kubernetes · Helm · Terraform ·
-NGINX · ArgoCD · GitHub Actions · Prometheus + Grafana · Jaeger + OpenTelemetry ·
-autocannon + k6
+Go · Erlang/OTP (+ syn clustering) · gRPC + Protocol Buffers · GraphQL ·
+WebSockets · PostgreSQL · Redis (+ Streams) · Kafka · MinIO · Stockfish/UCI ·
+Docker · Kubernetes · Helm · Terraform · NGINX · ArgoCD · GitHub Actions ·
+Prometheus + Grafana · Jaeger + OpenTelemetry · autocannon + k6
 
 ## Quickstart
 
@@ -108,10 +108,10 @@ Run `make help` to see every target.
 
 ```
 proto/        protobuf contracts (source of truth) + generated Go stubs
-pkg/          shared libraries: chess, engine client, redisx, kafkax, objstore,
-              openingbook, analysis, telemetry, store
-services/     gateway, game-service, engine-worker, analysis-worker,
-              session-manager (Erlang/OTP)
+pkg/          shared libraries: chess, engine client, redisx, kafkax, eventlog,
+              objstore, openingbook, analysis, telemetry, store
+services/     gateway, game-service, engine-worker, analysis-worker, fanout,
+              session-manager (clustered Erlang/OTP)
 web/          dependency-free neumorphic web client (served by NGINX)
 cmd/          small binaries (play CLI)
 migrations/   SQL migrations (goose)
@@ -212,6 +212,30 @@ Kubernetes, delivered by GitOps, observed end-to-end:
   p95 15ms), and a chaos suite (pod kills, rolling restarts, Redis/Postgres
   outages, HPA) that **found and fixed two real dependency-timeout bugs**
   (see [load/chaos/RESULTS.md](load/chaos/RESULTS.md)).
+
+**Beyond Q4 — horizontal scale & no single point of failure.** The scale work
+that closes the platform's last gaps, built on one new primitive — a durable,
+ordered **per-move event log** (a transactional outbox in Postgres relayed to a
+Redis Stream per game, so an event is durable exactly when its move is):
+
+- **The session tier no longer has a single point of failure.** The Erlang
+  session-manager — previously one stateful replica — is now a **`syn` cluster**.
+  Live games shard across the nodes by **consistent (rendezvous) hashing**, and a
+  game whose node dies **re-homes onto a survivor from a Redis checkpoint with its
+  clock intact** (only the brief outage is charged to the side on the move). No
+  sticky routing. Proven by an automated **two-node** test that halts the owning
+  node mid-game and asserts the game survives; reproduce it on the cluster with
+  `load/chaos/chaos.sh session-handoff`.
+- **A dedicated spectator fanout tier** (`services/fanout`) built for the "one
+  popular game, a huge crowd" shape: **one Redis reader per game** fans each move
+  out to every watcher over WebSocket as **deltas** (not full snapshots), with
+  reconnect-replay from the stream and slow-consumer backpressure. Watch any game
+  live in the browser at `/spectate` (see `web/watch.html`); load-test it with
+  `load/k6/fanout.js` — 500 spectators on one game are caught up in ~2 ms with
+  zero drops (a local floor; it fans out further per replica behind the HPA).
+
+Numbers and the failure experiments are in
+[load/chaos/RESULTS.md](load/chaos/RESULTS.md).
 
 See [ROADMAP.md](ROADMAP.md) for the full epic-by-epic status and [docs/adr/](docs/adr/)
 for the architecture decisions.

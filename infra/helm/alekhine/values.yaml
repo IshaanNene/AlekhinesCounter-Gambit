@@ -74,8 +74,40 @@ services:
 
   session-manager:
     image: alekhinescounter-gambit-session-manager:latest
-    replicas: 1            # stateful (live games); scaling needs sticky routing, deferred
+    # Now horizontally scalable: the Erlang nodes form one cluster (syn), games
+    # are sharded across them by consistent hashing, and a game whose node dies
+    # re-homes onto a survivor from its Redis checkpoint. No sticky routing.
+    replicas: 3
     port: 50053
+    clustered: true        # render the headless Service used for peer discovery
+    envFromSecret: acg-secrets   # ACG_ERLANG_COOKIE (shared distribution cookie)
+    envFieldRef:
+      POD_IP: status.podIP
+    env:
+      # Each node names itself by its own pod IP; peers are discovered from the
+      # headless Service's A records (see sm_cluster).
+      ACG_NODE_NAME: "session_manager@$(POD_IP)"
+      ACG_CLUSTER_DNS: "session-manager-headless"
+      ACG_REDIS_ADDR: "redis:6379"
+    hpa:
+      enabled: true
+      minReplicas: 3
+      maxReplicas: 8
+      targetCPUUtilizationPercentage: 75
+
+  fanout:
+    image: alekhinescounter-gambit-fanout:latest
+    replicas: 2            # scalable spectator fanout; add replicas as viewers grow
+    port: 8090
+    metricsPort: 9101
+    env:
+      ACG_FANOUT_ADDR: ":8090"
+      ACG_REDIS_ADDR: "redis:6379"
+    hpa:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 10
+      targetCPUUtilizationPercentage: 70
 
   web:
     image: alekhinescounter-gambit-web:latest
@@ -89,6 +121,9 @@ secrets:
   postgresDSN: "postgres://acg:acg@postgres:5432/acg?sslmode=disable"
   s3AccessKey: "acg"
   s3SecretKey: "acg-secret-key"
+  # Shared Erlang distribution cookie: every session-manager node must present the
+  # same value to join the cluster. Placeholder — supply out-of-band in production.
+  erlangCookie: "dev-only-erlang-cookie-change-me"
 
 # A single ingress fronting the app (see templates/ingress.yaml). Off by default;
 # the bare NodePort covers Compose and simple setups. Needs an ingress controller.

@@ -7,6 +7,7 @@
 -module(sm_clock).
 
 -export([new/2, start/3, on_move/2, time_left/3, running/1, remaining/1]).
+-export([increment/1, restore/5]).
 
 -export_type([clock/0, side/0]).
 
@@ -69,6 +70,21 @@ running(#{running := R}) -> R.
 %% running clock; use time_left/3 for a live value).
 -spec remaining(clock()) -> {non_neg_integer(), non_neg_integer()}.
 remaining(#{white := W, black := B}) -> {W, B}.
+
+%% @doc The Fischer increment added after each move.
+-spec increment(clock()) -> non_neg_integer().
+increment(#{increment := Inc}) -> Inc.
+
+%% @doc Rebuild a clock with explicit per-side remaining times, for restoring a
+%% game onto a new node after a handoff. `Running' is the side whose clock is
+%% ticking as of `Now' (or `none' for a settled clock). The caller is expected to
+%% have already deducted any time that elapsed during the outage from the running
+%% side, so the reconstructed clock runs forward from `Now'.
+-spec restore(non_neg_integer(), non_neg_integer(), non_neg_integer(), side() | none, integer()) -> clock().
+restore(WhiteMs, BlackMs, Inc, none, _Now) ->
+    #{white => WhiteMs, black => BlackMs, increment => Inc, running => none, since => undefined};
+restore(WhiteMs, BlackMs, Inc, Running, Now) ->
+    #{white => WhiteMs, black => BlackMs, increment => Inc, running => Running, since => Now}.
 
 %%% internal
 

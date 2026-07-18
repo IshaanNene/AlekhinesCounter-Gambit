@@ -22,11 +22,21 @@ DURATION=10 CONNECTIONS=60 node autocannon/graphql.js
 # Full authenticated game flow (k6)
 k6 run -e VUS=15 -e DURATION=20s load/k6/game_flow.js
 
-# WebSocket spectator fanout (k6)
+# WebSocket spectator fanout — gateway graphql-ws path (k6)
 k6 run -e VUS=150 -e DURATION=20s load/k6/spectate.js
+
+# WebSocket spectator fanout — dedicated fanout tier, one hot game (k6)
+k6 run -e GAME=<id> -e VUS=2000 -e DURATION=1m load/k6/fanout.js
 ```
 
 `make load` runs all three.
+
+`spectate.js` drives the gateway's graphql-ws subscription; `fanout.js` drives
+the purpose-built `services/fanout` tier (`/spectate`), the "one game, a huge
+crowd" shape where one Redis reader serves every viewer. GAME must already exist
+on the event stream (play a game first). See
+[chaos/RESULTS.md](chaos/RESULTS.md) for measured numbers and the
+`session-handoff` chaos experiment (kill a session-manager node; games survive).
 
 ## Chaos & scalability
 

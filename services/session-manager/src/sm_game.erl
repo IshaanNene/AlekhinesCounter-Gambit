@@ -22,34 +22,85 @@ start_link(GameId, Opts) ->
 %%% gen_server callbacks
 
 init([GameId, Opts]) ->
+    %% Registering under the game id is also the guard against a duplicate: if the
+    %% id is already live (here or on another node) syn refuses and we stop.
+    case sm_registry:register(GameId, self()) of
+        ok ->
+            case maps:get(restore, Opts, undefined) of
+                undefined -> init_fresh(GameId, Opts);
+                CP -> init_restore(GameId, CP)
+            end;
+        {error, already_registered} ->
+            {stop, already_registered}
+    end.
+
+%% A brand-new game: full clocks, White to move.
+init_fresh(GameId, Opts) ->
     InitialMs = maps:get(initial_ms, Opts, 300000),
     IncrementMs = maps:get(increment_ms, Opts, 0),
     GraceMs = maps:get(grace_ms, Opts, 30000),
     White = maps:get(white, Opts, undefined),
     Black = maps:get(black, Opts, undefined),
-    case sm_registry:register(GameId, self()) of
-        ok -> init_state(GameId, White, Black, InitialMs, IncrementMs, GraceMs);
-        {error, already_registered} -> {stop, already_registered}
+    Clock = sm_clock:start(sm_clock:new(InitialMs, IncrementMs), white, now_ms()),
+    State0 = base_state(GameId, White, Black, white, Clock, in_progress, undefined, GraceMs),
+    State = arm_flag_timer(State0),
+    checkpoint(State),
+    {ok, State}.
+
+%% A game re-homed onto this node after its previous owner died. The durable
+%% checkpoint carries each side's clock as of the last move; the side that was on
+%% the move kept "thinking" through the outage, so we deduct the wall time that
+%% has passed since the checkpoint from its clock — and if that ran it out, the
+%% game was in fact lost on time during the outage, so we settle it now.
+init_restore(GameId, CP) ->
+    #{
+        white := White, black := Black, increment_ms := Inc, grace_ms := Grace,
+        white_ms := WMs, black_ms := BMs, turn := Turn, status := Status,
+        result := Result, checkpoint_at := CkptAt
+    } = CP,
+    case Status of
+        finished ->
+            Clock = sm_clock:restore(WMs, BMs, Inc, none, now_ms()),
+            {ok, base_state(GameId, White, Black, Turn, Clock, finished, Result, Grace)};
+        in_progress ->
+            Elapsed = max(0, erlang:system_time(millisecond) - CkptAt),
+            Running = Turn, % the side to move is the side whose clock runs
+            {AdjW, AdjB} = deduct(Running, Elapsed, WMs, BMs),
+            Clock = sm_clock:restore(AdjW, AdjB, Inc, Running, now_ms()),
+            State0 = base_state(GameId, White, Black, Turn, Clock, in_progress, undefined, Grace),
+            case running_ms(Running, AdjW, AdjB) =< 0 of
+                true ->
+                    %% Flag fell during the outage; the mover loses on time.
+                    {ok, finish(State0, other(Running), flag)};
+                false ->
+                    State = arm_flag_timer(State0),
+                    checkpoint(State),
+                    {ok, State}
+            end
     end.
 
-init_state(GameId, White, Black, InitialMs, IncrementMs, GraceMs) ->
-    Clock = sm_clock:start(sm_clock:new(InitialMs, IncrementMs), white, now_ms()),
-    State0 = #{
+base_state(GameId, White, Black, Turn, Clock, Status, Result, GraceMs) ->
+    #{
         game_id => GameId,
         white => White,
         black => Black,
-        turn => white,
+        turn => Turn,
         clock => Clock,
-        status => in_progress,
-        result => undefined,
+        status => Status,
+        result => Result,
         spectators => [],
         connected => #{},
         grace_ms => GraceMs,
         grace_timers => #{},
         flag => undefined,
         epoch => 0
-    },
-    {ok, arm_flag_timer(State0)}.
+    }.
+
+deduct(white, E, W, B) -> {max(0, W - E), B};
+deduct(black, E, W, B) -> {W, max(0, B - E)}.
+
+running_ms(white, W, _B) -> W;
+running_ms(black, _W, B) -> B.
 
 handle_call({move, PlayerId}, _From, State = #{status := in_progress, turn := Turn}) ->
     case player_side(PlayerId, State) of
@@ -60,6 +111,10 @@ handle_call({move, PlayerId}, _From, State = #{status := in_progress, turn := Tu
                     {reply, {ok, snapshot(Finished)}, Finished};
                 {ok, NewClock} ->
                     Moved = arm_flag_timer(State#{clock := NewClock, turn := other(Turn)}),
+                    %% Persist the new clock/turn before acking, so a node death
+                    %% right after this move cannot lose it — the game re-homes
+                    %% from exactly this checkpoint.
+                    checkpoint(Moved),
                     {reply, {ok, snapshot(Moved)}, Moved}
             end;
         {ok, _OtherSide} ->
@@ -188,11 +243,36 @@ cancel_all_grace(State = #{grace_timers := GT}) ->
 mark_connected(PlayerId, Bool, State = #{connected := Conn}) ->
     State#{connected := maps:put(PlayerId, Bool, Conn)}.
 
-%% finish records the result and cancels all timers. Winner is a side, or `none'
-%% for a draw.
+%% finish records the result, cancels all timers, and checkpoints the settled
+%% game so a restore that races the finish still sees the correct outcome (the
+%% finished checkpoint carries a short TTL and then expires). Winner is a side,
+%% or `none' for a draw.
 finish(State, Winner, Reason) ->
     S1 = cancel_all_grace(cancel_flag(State)),
-    S1#{status := finished, result := #{winner => Winner, reason => Reason}}.
+    S2 = S1#{status := finished, result := #{winner => Winner, reason => Reason}},
+    checkpoint(S2),
+    S2.
+
+%% checkpoint writes the live session state to durable storage. Times are the
+%% current values (time_left accounts for the running clock); the wall-clock
+%% stamp lets a restoring node deduct the outage. Best-effort and nil-safe.
+checkpoint(State = #{game_id := G, white := W, black := B, turn := T,
+                     clock := C, status := S, result := R, grace_ms := Grace}) ->
+    Now = now_ms(),
+    _ = sm_checkpoint:save(#{
+        game_id => G,
+        white => W,
+        black => B,
+        increment_ms => sm_clock:increment(C),
+        grace_ms => Grace,
+        white_ms => max(0, sm_clock:time_left(C, white, Now)),
+        black_ms => max(0, sm_clock:time_left(C, black, Now)),
+        turn => T,
+        status => S,
+        result => R,
+        checkpoint_at => erlang:system_time(millisecond)
+    }),
+    State.
 
 -spec player_side(term(), map()) -> {ok, side()} | error.
 player_side(PlayerId, _State) when PlayerId =:= undefined ->

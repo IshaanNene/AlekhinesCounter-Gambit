@@ -240,6 +240,17 @@ func (s *Store) AppendMove(ctx context.Context, gameID string, m Move, status, e
 		return fmt.Errorf("insert move: %w", err)
 	}
 
+	// Transactional outbox: the event announcing this move is written in the same
+	// transaction as the move itself, so it is durable exactly when the move is —
+	// never a move persisted without its event, nor an event without its move.
+	// A relay (pkg/eventlog) publishes these to the per-game stream.
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO move_outbox (game_id, ply, uci, fen_after, status, end_reason, ended)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		gameID, m.Ply, m.UCI, m.FENAfter, status, endReason, ended); err != nil {
+		return fmt.Errorf("insert outbox: %w", err)
+	}
+
 	if ended {
 		if _, err := tx.Exec(ctx,
 			`UPDATE games SET fen = $1, status = $2, end_reason = $3, ended_at = now() WHERE id = $4`,

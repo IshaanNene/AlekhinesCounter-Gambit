@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Watch · Alekhine's Counter-Gambit</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    /* Watch-only chrome; the board, pieces and theme come from styles.css. */
+    .brand__sub { color: var(--muted); font-weight: 400; }
+    .spectate-meta { display: flex; gap: 8px; align-items: center; }
+    .pill {
+      font: 600 12px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+      letter-spacing: .04em; text-transform: uppercase;
+      padding: 5px 10px; border-radius: 999px;
+      background: var(--surface, rgba(127,127,127,.12)); color: var(--muted);
+      border: 1px solid var(--border, rgba(127,127,127,.25));
+    }
+    .pill--live { color: #2f9e5f; border-color: rgba(47,158,95,.5); }
+    .pill--idle { color: var(--muted); }
+    .watch-moves {
+      list-style: none; margin: 14px auto 0; padding: 0; max-width: 420px;
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+      gap: 4px 14px; font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">Alekhine's Counter-Gambit <span class="brand__sub">· live</span></div>
+      <div class="spectate-meta">
+        <span id="conn" class="pill pill--idle">connecting…</span>
+        <span id="watchers" class="pill" hidden></span>
+      </div>
+    </header>
+
+    <main class="board-area" style="max-width: 640px; margin: 0 auto;">
+      <div class="board-well">
+        <div class="board" id="board" role="grid" aria-label="Chess board"></div>
+      </div>
+      <p id="status" class="turn-note" style="text-align:center;">Waiting for the game…</p>
+      <ol id="moves" class="watch-moves" aria-label="Move list"></ol>
+    </main>
+  </div>
+
+  <script type="module" src="watch.js"></script>
+</body>
+</html>

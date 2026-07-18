@@ -1,10 +1,19 @@
 ## Erlang VM args for the session-manager release.
 ##
-## The release boot scripts require a node name even though we do not rely on
-## Erlang distribution (the service is reached over gRPC). Binding the node to
-## 127.0.0.1 keeps the distribution port loopback-only inside the container.
--name session_manager@127.0.0.1
--setcookie acg_session_manager
+## Node identity drives Erlang distribution, which is how the session-manager
+## replicas form one cluster (syn rides on top of it). In a container these come
+## from the environment — ACG_NODE_NAME is the pod's own routable name (e.g.
+## session_manager@10.1.2.3) and ACG_ERLANG_COOKIE is a shared secret — and
+## RELX_REPLACE_OS_VARS=true substitutes them here at boot. The Dockerfile sets
+## single-node defaults so a bare `docker run` still works.
+-name ${ACG_NODE_NAME}
+-setcookie ${ACG_ERLANG_COOKIE}
+
+## Pin the distribution listener to a single known port so a NetworkPolicy or
+## firewall can allow inter-pod clustering traffic (epmd on 4369 + this port),
+## rather than the default random high port.
+-kernel inet_dist_listen_min 9100
+-kernel inet_dist_listen_max 9100
 
 ## Kernel poll and async threads for I/O-heavy serving.
 +K true
