@@ -1,0 +1,103 @@
+# Overrides for a real cloud Kubernetes cluster (EKS, GKE, AKS — anything).
+#
+# Cloud-agnostic on purpose: it pulls the CI-published images from GHCR, moves
+# the durable stores to managed services (Postgres, object storage), and keeps
+# the rest in-cluster. Point it at your cluster and run:
+#
+#   helm upgrade --install acg infra/helm/alekhine \
+#     -f infra/helm/alekhine/values-cloud.yaml \
+#     --set secrets.postgresDSN="postgres://…@your-rds:5432/acg?sslmode=require" \
+#     --set secrets.sessionSecret="$(openssl rand -base64 32)" \
+#     --set secrets.erlangCookie="$(openssl rand -hex 24)" \
+#     --set secrets.s3AccessKey=… --set secrets.s3SecretKey=…
+#
+# See CLOUD.md for the full runbook. NEVER commit real secrets — pass them with
+# --set, an external secret store, or sealed-secrets.
+
+global:
+  # The images CI builds and pushes on every merge to main. Override the owner if
+  # you forked. The trailing slash matters (acg.image concatenates registry+name).
+  imageRegistry: "ghcr.io/ishaannene/"
+  imagePullPolicy: IfNotPresent
+  # In-cluster Jaeger stays the trace backend; point at a managed OTLP collector
+  # here if you have one.
+  otlpEndpoint: "jaeger:4317"
+
+# The published image names are `acg-<service>` (the local kind flow uses
+# different, compose-built names, so they are overridden here rather than in the
+# base values).
+services:
+  gateway:
+    image: acg-gateway:latest
+    env:
+      ACG_GATEWAY_ADDR: ":8080"
+      ACG_GAME_ADDR_CLIENT: "game-service:50051"
+      ACG_SESSION_ADDR: "session-manager:50053"
+      ACG_REDIS_ADDR: "redis:6379"
+      # Behind TLS in the cloud, so the session cookie must be Secure.
+      ACG_COOKIE_SECURE: "true"
+  game-service:
+    image: acg-game-service:latest
+    env:
+      ACG_GAME_ADDR: ":50051"
+      ACG_ENGINE_ADDR: "engine-worker:50052"
+      ACG_SESSION_ADDR: "session-manager:50053"
+      ACG_REDIS_ADDR: "redis:6379"
+      ACG_KAFKA_BROKERS: "kafka:9092"
+      # Managed object storage (S3/GCS). ACG_POSTGRES_DSN comes from the Secret.
+      ACG_S3_ENDPOINT: "s3.amazonaws.com"          # GCS: storage.googleapis.com
+      ACG_S3_SSL: "true"
+      ACG_S3_PUBLIC_ENDPOINT: "s3.amazonaws.com"   # browser-facing presigned URLs
+      ACG_S3_PUBLIC_SSL: "true"
+      ACG_RUN_MIGRATIONS: "true"
+  engine-worker:
+    image: acg-engine-worker:latest
+    env:
+      ACG_S3_ENDPOINT: "s3.amazonaws.com"
+      ACG_S3_SSL: "true"
+  analysis-worker:
+    image: acg-analysis-worker:latest
+    env:
+      ACG_KAFKA_BROKERS: "kafka:9092"
+      ACG_ENGINE_ADDR: "engine-worker:50052"
+      ACG_REDIS_ADDR: "redis:6379"
+      ACG_S3_ENDPOINT: "s3.amazonaws.com"
+      ACG_S3_SSL: "true"
+      ACG_ANALYSIS_DEPTH: "14"
+  session-manager:
+    image: acg-session-manager:latest
+    # clustered/env/HPA are inherited from values.yaml; ACG_REDIS_ADDR too.
+  fanout:
+    image: acg-fanout:latest
+  web:
+    image: acg-web:latest
+
+# Managed stores replace the bundled Postgres and object storage; redis-stack,
+# Kafka, and Jaeger stay in-cluster.
+#   - redis-stack: keeps Bloom + TimeSeries (novelty + fair-play), which
+#     ElastiCache/Memorystore do NOT provide. Swap to Redis Enterprise Cloud only
+#     if you want it fully managed.
+#   - kafka: deliberately disposable (Postgres is the source of truth), so it is
+#     cheaper to keep here than to run MSK; set enabled:false + point
+#     ACG_KAFKA_BROKERS at MSK if you prefer.
+infra:
+  enabled: true
+infraServices:
+  postgres: { enabled: false }   # -> managed Postgres (RDS / Cloud SQL); DSN in the Secret
+  minio: { enabled: false }      # -> managed object storage (S3 / GCS)
+  # redis, kafka, jaeger keep their defaults from values.yaml (enabled).
+
+# Real, internet-facing ingress. Set your host and terminate TLS at the ingress
+# (cert-manager + a ClusterIssuer, or the cloud LB). ingress-nginx assumed.
+ingress:
+  enabled: true
+  className: nginx
+  host: "chess.example.com"   # <- your DNS name
+
+# Placeholders only — override every one at install time (see the header).
+secrets:
+  sessionSecret: "REPLACE-with-a-32-byte-random-secret"
+  postgresDSN: "postgres://acg:REPLACE@your-managed-postgres:5432/acg?sslmode=require"
+  s3AccessKey: "REPLACE"
+  s3SecretKey: "REPLACE"
+  erlangCookie: "REPLACE-with-a-random-cluster-cookie"
