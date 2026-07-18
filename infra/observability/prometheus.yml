@@ -15,5 +15,6 @@ scrape_configs:
           - gateway:9101
           - engine-worker:9101
           - analysis-worker:9101
+          - fanout:9101
         labels:
           platform: alekhine
