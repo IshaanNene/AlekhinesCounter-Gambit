@@ -22,6 +22,7 @@ import (
 
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/config"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/engine"
+	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/eventlog"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/kafkax"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/objstore"
 	"github.com/IshaanNene/AlekhinesCounter-Gambit/pkg/redisx"
@@ -181,6 +182,12 @@ func main() {
 
 	sigCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+
+	// Drain the move outbox into the per-game event streams that feed live fanout
+	// and session-state recovery. Reuses the same Redis client as the eval cache;
+	// with Redis unconfigured the relay is a no-op and play is unaffected.
+	go eventlog.NewRelay(st, eventlog.NewStream(rdb, log), log).Run(sigCtx)
+
 	go func() {
 		<-sigCtx.Done()
 		log.Info("shutting down")
