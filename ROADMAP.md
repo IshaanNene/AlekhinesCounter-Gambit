@@ -304,6 +304,45 @@ autoscaling — all reproducible from `terraform apply` + `git push`.
 
 ---
 
+## Q5 — Horizontal Scale & No Single Point of Failure
+
+Close the two remaining scale gaps the earlier quarters left honest about: the
+single stateful session replica, and full-snapshot fanout. Both build on one new
+primitive.
+
+### Epic 5.1 — Durable per-move event log
+- [x] Transactional outbox: `AppendMove` writes the move + an outbox row in one
+      Postgres tx, so an event is durable exactly when its move is (no dual-write)
+- [x] A relay drains the outbox to a Redis Stream per game (`pkg/eventlog`),
+      at-least-once, ply-ordered; replay + live tail APIs
+- [x] Verified against real Redis + Postgres (append→replay, outbox roundtrip)
+
+### Epic 5.2 — No-SPOF distributed session tier (★ Erlang)
+- [x] `syn`-backed cluster-wide game registry (location-transparent addressing)
+- [x] Consistent **rendezvous** hashing for game ownership; owner-routed create
+- [x] Redis checkpoint of clock/turn; a dead node's games **re-home onto a
+      survivor**, deducting the outage from the side on the move
+- [x] Proven by a two-node `peer` test (halt the owner, game survives, clocks intact)
+- [x] Deploy: env-driven node identity, headless-Service DNS discovery, 3 replicas
+      + HPA; kind runs 2 for the handoff demo
+- [~] Cluster-level `chaos.sh session-handoff` scenario written; run on a real
+      cluster to record survivor counts (mechanism proven by the 2-node test)
+
+### Epic 5.3 — Spectator fanout tier
+- [x] `services/fanout`: one Redis reader per game fans out to many WebSocket
+      spectators; in-memory backlog handed over atomically (never miss/dup a move)
+- [x] Delta protocol + reconnect-replay (`from=<id>`) + slow-consumer backpressure
+- [x] Browser watch page (`web/watch.html`) + NGINX `/spectate` route; Prometheus
+      metrics for the Grafana wall
+- [x] k6 load test (`load/k6/fanout.js`): 500 spectators/game caught up in ~2 ms,
+      0 drops (local floor; fans out further per replica)
+
+**Exit criteria:** killing any session-manager node under live games loses zero
+games (clocks intact), and a single hot game serves a large spectator crowd from
+one reader per replica — both reproducible from the tests and `chaos.sh`.
+
+---
+
 ## Resume bullets (harvest as you go)
 - Built a distributed chess platform (Go + Erlang/OTP) running Stockfish engine
   workers, orchestrated on Kubernetes with GitOps (ArgoCD) and Terraform-provisioned infra.
@@ -313,3 +352,10 @@ autoscaling — all reproducible from `terraform apply` + `git push`.
   autoscaling gRPC engine workers; results served via GraphQL + WebSockets.
 - Instrumented end-to-end observability (Prometheus/Grafana metrics, Jaeger/OTel
   tracing) and load-tested to N concurrent games with autocannon + k6.
+- Eliminated the platform's last single point of failure by clustering the stateful
+  Erlang session tier (syn + rendezvous-hash ownership); a killed node's live games
+  re-home onto a survivor from a Redis checkpoint with clocks intact — verified by a
+  two-node node-kill test.
+- Built a dedicated WebSocket fanout tier (one Redis-Streams reader per game, delta
+  protocol, reconnect-replay, backpressure) that serves a large spectator crowd on a
+  single game; ~2 ms catch-up, zero drops under load.
