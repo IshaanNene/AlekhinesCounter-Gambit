@@ -92,12 +92,43 @@ jobs:
       - name: Test
         run: go test ./... -count=1
 
+  # The Erlang session-manager: compile + eunit. Redis is provided, so eunit also
+  # runs the checkpoint tests and the two-node handoff test (halt the owner node
+  # mid-game, assert the game re-homes with clocks intact) on every push.
+  erlang:
+    name: erlang (session-manager)
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      ACG_REDIS_ADDR: localhost:6379
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "27"
+          rebar3-version: "3"
+      - name: Compile
+        working-directory: services/session-manager
+        run: rebar3 compile
+      - name: EUnit (incl. checkpoint + 2-node handoff)
+        working-directory: services/session-manager
+        run: rebar3 eunit
+
   # Build every service image and push it to GHCR — the "CI builds and pushes"
   # half of the GitOps loop (ArgoCD deploys the result). Only on main, and only
-  # once lint/proto/test are green, so a red build never publishes an image.
+  # once lint/proto/test/erlang are green, so a red build never publishes an image.
   images:
     name: image (${{ matrix.service }})
-    needs: [lint, proto, test]
+    needs: [lint, proto, test, erlang]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
@@ -112,6 +143,7 @@ jobs:
           - { service: engine-worker, dockerfile: services/engine-worker/Dockerfile }
           - { service: analysis-worker, dockerfile: services/analysis-worker/Dockerfile }
           - { service: session-manager, dockerfile: services/session-manager/Dockerfile }
+          - { service: fanout, dockerfile: services/fanout/Dockerfile }
           - { service: web, dockerfile: web/Dockerfile }
     steps:
       - uses: actions/checkout@v4
