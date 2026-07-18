@@ -14,6 +14,7 @@
 #   rolling-restart  redeploy the gateway under load; count dropped requests
 #   degrade-redis    kill Redis under load (the limiter must fail open)
 #   degrade-postgres kill Postgres under load, then bring it back
+#   session-handoff  kill a session-manager node; live games re-home, clocks intact
 #   hpa              enable an HPA and watch it scale under sustained load
 #   all              run everything in sequence
 #
@@ -34,6 +35,41 @@ probe() { # <duration_s> <connections>  -> one JSON line of results
   TARGET="$TARGET" DURATION="$1" CONNECTIONS="$2" node "$HERE/probe.mjs" 2>/dev/null | tail -1
 }
 jget() { python3 -c "import sys,json;d=json.load(sys.stdin);print(d.get('$1',''))"; }
+
+# gql <token|""> <json-body> -> raw response. jpath <a.b.c> pulls a nested value.
+gql() {
+  local auth=(); [ -n "$1" ] && auth=(-H "Authorization: Bearer $1")
+  curl -s -m 6 -X POST "$TARGET" -H 'content-type: application/json' "${auth[@]}" -d "$2"
+}
+jpath() {
+  python3 -c "import sys,json
+d=json.load(sys.stdin)
+for k in '$1'.split('.'):
+    d = d.get(k) if isinstance(d, dict) else None
+print(d if d is not None else '')"
+}
+
+# live_game -> a game id for a started human-vs-human session (two guests join, one
+# move played) so the session-manager is holding a running clock for it.
+live_game() {
+  local t1 t2 gid
+  t1=$(gql "" '{"query":"mutation{loginAsGuest{token}}"}' | jpath data.loginAsGuest.token)
+  t2=$(gql "" '{"query":"mutation{loginAsGuest{token}}"}' | jpath data.loginAsGuest.token)
+  gid=$(gql "$t1" '{"query":"mutation($in:CreateGameInput!){createGame(input:$in){id}}","variables":{"in":{"initialMs":300000,"incrementMs":2000}}}' | jpath data.createGame.id)
+  [ -z "$gid" ] && { echo ""; return; }
+  gql "$t2" "{\"query\":\"mutation{joinGame(gameId:\\\"$gid\\\"){id}}\"}" >/dev/null
+  gql "$t1" "{\"query\":\"mutation(\$in:MoveInput!){move(input:\$in){id}}\",\"variables\":{\"in\":{\"gameId\":\"$gid\",\"uci\":\"e2e4\"}}}" >/dev/null
+  echo "$gid"
+}
+
+# clock_of <gameId> -> "whiteMs blackMs running", or "" when the game has no live
+# clock (session lost). Hitting Game.clock is what queries the session-manager.
+clock_of() {
+  gql "" "{\"query\":\"query{game(id:\\\"$1\\\"){clock{whiteMs blackMs running}}}\"}" \
+    | python3 -c "import sys,json
+c=((json.load(sys.stdin).get('data') or {}).get('game') or {}).get('clock')
+print(f\"{c['whiteMs']} {c['blackMs']} {c['running']}\" if c else '')"
+}
 
 wait_ready() { kubectl rollout status "deploy/$1" -n "$NS" --timeout=150s >/dev/null; }
 scale_to()   { kubectl scale "deploy/$1" --replicas="$2" -n "$NS" >/dev/null; wait_ready "$1"; }
@@ -207,6 +243,35 @@ exp_hpa() {
   limiter_restore
 }
 
+exp_session_handoff() {
+  c_blue "▶ No-SPOF sessions — kill a session-manager node, live games survive"
+  c_dim  "  games shard across the Erlang cluster; a killed node's games re-home"
+  c_dim  "  onto a survivor from their Redis checkpoint, clocks intact"
+
+  scale_to session-manager 3
+
+  # Several live games, so a single node owns some of them and the kill is a real
+  # handoff rather than a no-op on the wrong node.
+  local games=() gid n=6
+  echo "  starting $n live human-vs-human games (running clocks)…"
+  for _ in $(seq "$n"); do
+    gid=$(live_game); [ -n "$gid" ] && games+=("$gid")
+  done
+  local before=0
+  for gid in "${games[@]}"; do [ -n "$(clock_of "$gid")" ] && before=$((before + 1)); done
+  echo "  $before/${#games[@]} games have a live clock before the kill"
+
+  echo "  killing a session-manager pod…"
+  kubectl delete pod "$(active_pod session-manager)" -n "$NS" --wait=false >/dev/null 2>&1
+  sleep 5 # let syn drop the dead node so ownership recomputes
+
+  local after=0
+  for gid in "${games[@]}"; do [ -n "$(clock_of "$gid")" ] && after=$((after + 1)); done
+  printf "     %s/%s games still have a live clock after the node loss → survivors re-homed\n" \
+    "$after" "${#games[@]}"
+  wait_ready session-manager
+}
+
 main() {
   case "${1:-}" in
     scale)            exp_scale ;;
@@ -214,6 +279,7 @@ main() {
     rolling-restart)  exp_rolling_restart ;;
     degrade-redis)    exp_degrade_redis ;;
     degrade-postgres) exp_degrade_postgres ;;
+    session-handoff)  exp_session_handoff ;;
     hpa)              exp_hpa ;;
     all)
       exp_scale; echo
@@ -221,6 +287,7 @@ main() {
       exp_rolling_restart; echo
       exp_degrade_redis; echo
       exp_degrade_postgres; echo
+      exp_session_handoff; echo
       exp_hpa ;;
     *)
       grep -E '^#( |$)' "$0" | sed -E 's/^# ?//' | head -25 ; exit 1 ;;

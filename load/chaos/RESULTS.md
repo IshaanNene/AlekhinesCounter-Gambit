@@ -121,6 +121,46 @@ min 1 / max 5, under sustained load:
 The HPA observes CPU far over target and scales to the ceiling within ~30 s —
 autoscaling that actually reacts, not just a manifest that claims to.
 
+## No-SPOF sessions — kill a session-manager node, live games survive
+
+The session-manager was the platform's last stateful single point of failure. It
+is now a clustered Erlang tier: live games shard across the nodes by consistent
+hashing, and a game whose node dies re-homes onto a survivor from its Redis
+checkpoint, clocks intact — no sticky routing.
+
+The mechanism is proven by an automated **two-node** test (`sm_dist_tests.erl`):
+it starts two real session-manager nodes on one Redis, plays a move on the game's
+owner, **halts that node**, and asserts the game re-homes onto the survivor:
+
+```
+SMDIST_PASS handoff verified: game re-homed acga@127.0.0.1 -> acgb@127.0.0.1,
+                              clocks W=600000ms B=599996ms
+```
+
+Both clocks survive; only the ~4 ms outage is charged to the side that was on the
+move, exactly as designed. Run `load/chaos/chaos.sh session-handoff` to reproduce
+it at the cluster level: it starts several live games, kills a session-manager
+pod, and reports how many still hold a live clock afterward (the ones the dead
+node owned re-homed on the next query). *(This experiment needs a cluster; it is
+not part of the laptop numbers above.)*
+
+## Spectator fanout — one hot game, a crowd
+
+The fanout tier (`services/fanout`) exists for the "one popular game, thousands of
+spectators" shape: one Redis reader per game feeds every viewer. Driven by
+`load/k6/fanout.js` against a **single local fanout process + Redis** (not the
+cluster — a floor, like everything here), 500 concurrent spectators on one game:
+
+| spectators (concurrent / total sessions) | caught-up (synced) | time-to-synced p95 | connect p95 | handshake fails | drops |
+|---|---|---|---|---|---|
+| 500 / 2,750 | 2,750 (100%) | 2 ms | 1 ms | 0 % | 0 |
+
+Every joiner is caught up from the in-memory backlog in single-digit milliseconds
+and nothing is dropped, because the crowd is served from one reader, not one
+Redis subscription each. At cluster scale this fans out further: each fanout
+replica keeps its own reader, so N replicas is an N-way tree over Redis — add
+replicas (the HPA does) and the ceiling moves with the crowd.
+
 ---
 
 ### Summary
@@ -133,6 +173,8 @@ autoscaling that actually reacts, not just a manifest that claims to.
 | Rolling deploy | ✅ zero-downtime |
 | Redis outage | ✅ **after fix**: fails open in ~60 ms, 0 errors |
 | Postgres outage | ✅ **after fix**: fails fast in ~3 s, 0 crashes, auto-recovers |
+| Session-node loss | ✅ live games re-home to a survivor, clocks intact (2-node test) |
+| Spectator fanout | ✅ 500 viewers/game caught up in ~2 ms, 0 drops (local floor) |
 | Autoscaling | ✅ HPA scales 1→5 under load |
 
 Two real resilience bugs found and fixed, both of the same shape — an unbounded
