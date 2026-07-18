@@ -21,6 +21,11 @@
 */ -}}
 {{- if .Values.infra.enabled }}
 {{- range $name, $cfg := .Values.infraServices }}
+{{- /* Per-service switch (dig handles an explicit `false`, which `default` would
+       swallow): a cloud values file can drop Postgres/Kafka/MinIO for managed
+       services while keeping redis-stack in-cluster for its Bloom/TimeSeries
+       modules, which ElastiCache/Memorystore do not provide. */}}
+{{- if dig "enabled" true $cfg }}
 {{- $persistent := $cfg.persistent | default false }}
 ---
 apiVersion: apps/v1
@@ -130,5 +135,6 @@ spec:
       port: {{ . }}
       targetPort: {{ . }}
     {{- end }}
+{{- end }}
 {{- end }}
 {{- end }}
