@@ -53,6 +53,6 @@ Then point DNS at the ingress LoadBalancer and add TLS. Full runbook:
 - **Private Cloud SQL.** The DB has no public IP; it is reached over the VPC
   peering range from the GKE pods. That is why the module reserves a range and
   creates a `servicenetworking` connection.
-- **Not `terraform apply`-verified here** — this environment has no GCP
-  credentials. It is written against the pinned `hashicorp/google` provider with
-  outputs wired to the chart; apply it with your own project.
+- **Validation.** `terraform init` + `terraform validate` pass against the real
+  `hashicorp/google` provider schema. It is **not** `apply`-verified — that needs
+  GCP credentials and creates billable resources; apply with your own project.

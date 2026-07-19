@@ -50,3 +50,6 @@ real cluster).
   environment.
 - **GKE.** The same chart + `values-cloud.yaml` also deploy to GCP — see the
   parallel [`../gke`](../gke) module (GKE + Cloud SQL + GCS).
+- **Validation.** `terraform init` + `terraform validate` pass against the real
+  AWS provider + community module schemas. It is **not** `apply`-verified — that
+  needs AWS credentials and creates billable resources.
