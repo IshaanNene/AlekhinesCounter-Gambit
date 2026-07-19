@@ -48,6 +48,8 @@ real cluster).
 - **Cost knobs.** `single_nat_gateway`, `db.t3.small`, `db_multi_az=false`, and a
   small node group keep a demo cheap; the variables expose all of them for a real
   environment.
-- **GKE.** The same chart + `values-cloud.yaml` deploy to GKE; a parallel
-  `infra/terraform/gke` module (GKE + Cloud SQL + GCS) would be the analog and is
-  the natural next addition.
+- **GKE.** The same chart + `values-cloud.yaml` also deploy to GCP — see the
+  parallel [`../gke`](../gke) module (GKE + Cloud SQL + GCS).
+- **Validation.** `terraform init` + `terraform validate` pass against the real
+  AWS provider + community module schemas. It is **not** `apply`-verified — that
+  needs AWS credentials and creates billable resources.
