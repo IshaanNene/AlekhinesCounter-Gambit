@@ -13,11 +13,11 @@ chart to a real, managed Kubernetes cluster (EKS, GKE, AKS) using
   (novelty + fair-play), which ElastiCache/Memorystore do not provide. Kafka is
   disposable (Postgres is the source of truth), so it is cheaper here than MSK.
 
-Cloud-agnostic by design. For **AWS specifically**, `infra/terraform/eks`
-provisions the whole substrate (EKS + RDS + S3 + IAM) and prints the exact
-`helm install` command wired to its outputs — see
-[../terraform/eks/README.md](../terraform/eks/README.md). The steps below are the
-generic, any-cluster path.
+Cloud-agnostic by design. Terraform modules provision the whole substrate and
+print the exact `helm install` wired to their outputs — pick your cloud:
+[AWS / EKS](../terraform/eks/README.md) (EKS + RDS + S3) or
+[GCP / GKE](../terraform/gke/README.md) (GKE + Cloud SQL + GCS). The steps below
+are the generic, any-cluster path.
 
 ## Prerequisites
 
