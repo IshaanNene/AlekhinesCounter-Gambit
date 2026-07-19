@@ -121,6 +121,9 @@ secrets:
   postgresDSN: "postgres://acg:acg@postgres:5432/acg?sslmode=disable"
   s3AccessKey: "acg"
   s3SecretKey: "acg-secret-key"
+  # Bucket-name prefix. Empty for local/MinIO (buckets stay pgn/analysis/books);
+  # set to the Terraform s3_bucket_prefix output on S3 (globally-unique names).
+  s3BucketPrefix: ""
   # Shared Erlang distribution cookie: every session-manager node must present the
   # same value to join the cluster. Placeholder — supply out-of-band in production.
   erlangCookie: "dev-only-erlang-cookie-change-me"

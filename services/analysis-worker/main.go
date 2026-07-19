@@ -87,6 +87,7 @@ func main() {
 		PublicEndpoint: config.Getenv("ACG_S3_PUBLIC_ENDPOINT", ""),
 		PublicSSL:      config.Getenv("ACG_S3_PUBLIC_SSL", "false") == "true",
 		Region:         config.Getenv("ACG_S3_REGION", "us-east-1"),
+		BucketPrefix:   config.Getenv("ACG_S3_BUCKET_PREFIX", ""),
 	})
 	if err != nil {
 		log.Warn("object storage unavailable — analysis JSON archival disabled", "error", err)

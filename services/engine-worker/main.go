@@ -103,11 +103,12 @@ func main() {
 // built-in seed.
 func dialObjectStore(ctx context.Context, log *slog.Logger) *objstore.Store {
 	objects, err := objstore.Dial(ctx, objstore.Config{
-		Endpoint:  config.Getenv("ACG_S3_ENDPOINT", ""),
-		AccessKey: config.Getenv("ACG_S3_ACCESS_KEY", ""),
-		SecretKey: config.Getenv("ACG_S3_SECRET_KEY", ""),
-		UseSSL:    config.Getenv("ACG_S3_SSL", "false") == "true",
-		Region:    config.Getenv("ACG_S3_REGION", "us-east-1"),
+		Endpoint:     config.Getenv("ACG_S3_ENDPOINT", ""),
+		AccessKey:    config.Getenv("ACG_S3_ACCESS_KEY", ""),
+		SecretKey:    config.Getenv("ACG_S3_SECRET_KEY", ""),
+		UseSSL:       config.Getenv("ACG_S3_SSL", "false") == "true",
+		Region:       config.Getenv("ACG_S3_REGION", "us-east-1"),
+		BucketPrefix: config.Getenv("ACG_S3_BUCKET_PREFIX", ""),
 	})
 	if err != nil {
 		log.Warn("object storage unavailable — using the built-in opening book", "error", err)

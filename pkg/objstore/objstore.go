@@ -39,6 +39,7 @@ const (
 type Store struct {
 	client        *minio.Client
 	presignClient *minio.Client
+	prefix        string
 }
 
 // Config describes how to reach the object store.
@@ -54,6 +55,10 @@ type Config struct {
 	// Region pins the S3 region so the public client signs offline instead of
 	// making a location call to an endpoint it cannot reach.
 	Region string
+	// BucketPrefix is prepended to every bucket name. Empty for a private MinIO
+	// (buckets stay "pgn"/"analysis"/"books"); set to a deployment-unique value on
+	// a shared namespace like real S3, where bucket names are globally unique.
+	BucketPrefix string
 }
 
 // Dial connects and ensures the buckets exist. An empty endpoint returns
@@ -70,7 +75,7 @@ func Dial(ctx context.Context, cfg Config) (*Store, error) {
 	if err != nil {
 		return nil, fmt.Errorf("object store client: %w", err)
 	}
-	s := &Store{client: client, presignClient: client}
+	s := &Store{client: client, presignClient: client, prefix: cfg.BucketPrefix}
 	if cfg.PublicEndpoint != "" && cfg.PublicEndpoint != cfg.Endpoint {
 		pub, err := minio.New(cfg.PublicEndpoint, &minio.Options{
 			Creds:  credentials.NewStaticV4(cfg.AccessKey, cfg.SecretKey, ""),
@@ -99,20 +104,25 @@ func Dial(ctx context.Context, cfg Config) (*Store, error) {
 // Enabled reports whether a store is attached.
 func (s *Store) Enabled() bool { return s != nil && s.client != nil }
 
+// qualify maps a logical bucket name ("pgn") to its actual name by applying the
+// configured prefix, so callers keep using the exported bucket constants.
+func (s *Store) qualify(bucket string) string { return s.prefix + bucket }
+
 func (s *Store) ensureBucket(ctx context.Context, bucket string) error {
-	exists, err := s.client.BucketExists(ctx, bucket)
+	name := s.qualify(bucket)
+	exists, err := s.client.BucketExists(ctx, name)
 	if err != nil {
-		return fmt.Errorf("check bucket %q: %w", bucket, err)
+		return fmt.Errorf("check bucket %q: %w", name, err)
 	}
 	if exists {
 		return nil
 	}
-	if err := s.client.MakeBucket(ctx, bucket, minio.MakeBucketOptions{}); err != nil {
+	if err := s.client.MakeBucket(ctx, name, minio.MakeBucketOptions{}); err != nil {
 		// A racing replica may have created it between our check and make.
-		if exists2, _ := s.client.BucketExists(ctx, bucket); exists2 {
+		if exists2, _ := s.client.BucketExists(ctx, name); exists2 {
 			return nil
 		}
-		return fmt.Errorf("create bucket %q: %w", bucket, err)
+		return fmt.Errorf("create bucket %q: %w", name, err)
 	}
 	return nil
 }
@@ -122,7 +132,7 @@ func (s *Store) Put(ctx context.Context, bucket, key string, data []byte, conten
 	if !s.Enabled() {
 		return nil
 	}
-	_, err := s.client.PutObject(ctx, bucket, key,
+	_, err := s.client.PutObject(ctx, s.qualify(bucket), key,
 		bytes.NewReader(data), int64(len(data)),
 		minio.PutObjectOptions{ContentType: contentType})
 	if err != nil {
@@ -136,7 +146,7 @@ func (s *Store) Get(ctx context.Context, bucket, key string) ([]byte, error) {
 	if !s.Enabled() {
 		return nil, errors.New("object store is disabled")
 	}
-	obj, err := s.client.GetObject(ctx, bucket, key, minio.GetObjectOptions{})
+	obj, err := s.client.GetObject(ctx, s.qualify(bucket), key, minio.GetObjectOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("get %s/%s: %w", bucket, key, err)
 	}
@@ -163,7 +173,7 @@ func (s *Store) PresignedGet(ctx context.Context, bucket, key string, ttl time.D
 		reqParams.Set("response-content-disposition",
 			fmt.Sprintf("attachment; filename=%q", downloadName))
 	}
-	u, err := s.presignClient.PresignedGetObject(ctx, bucket, key, ttl, reqParams)
+	u, err := s.presignClient.PresignedGetObject(ctx, s.qualify(bucket), key, ttl, reqParams)
 	if err != nil {
 		return "", fmt.Errorf("presign %s/%s: %w", bucket, key, err)
 	}
@@ -175,7 +185,7 @@ func (s *Store) Exists(ctx context.Context, bucket, key string) (bool, error) {
 	if !s.Enabled() {
 		return false, nil
 	}
-	_, err := s.client.StatObject(ctx, bucket, key, minio.StatObjectOptions{})
+	_, err := s.client.StatObject(ctx, s.qualify(bucket), key, minio.StatObjectOptions{})
 	if err != nil {
 		if minio.ToErrorResponse(err).Code == "NoSuchKey" {
 			return false, nil
