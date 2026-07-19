@@ -100,4 +100,7 @@ secrets:
   postgresDSN: "postgres://acg:REPLACE@your-managed-postgres:5432/acg?sslmode=require"
   s3AccessKey: "REPLACE"
   s3SecretKey: "REPLACE"
+  # Globally-unique bucket prefix (the Terraform s3_bucket_prefix output), e.g.
+  # "alekhine-ab12cd-". Required on S3/GCS; leave empty only for MinIO.
+  s3BucketPrefix: "REPLACE-with-a-unique-prefix-"
   erlangCookie: "REPLACE-with-a-random-cluster-cookie"
