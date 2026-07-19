@@ -13,9 +13,11 @@ chart to a real, managed Kubernetes cluster (EKS, GKE, AKS) using
   (novelty + fair-play), which ElastiCache/Memorystore do not provide. Kafka is
   disposable (Postgres is the source of truth), so it is cheaper here than MSK.
 
-Cloud-agnostic by design — the cluster itself is bring-your-own for now (an EKS
-or GKE Terraform module is the next step; the chart and this runbook do not
-change when it lands).
+Cloud-agnostic by design. For **AWS specifically**, `infra/terraform/eks`
+provisions the whole substrate (EKS + RDS + S3 + IAM) and prints the exact
+`helm install` command wired to its outputs — see
+[../terraform/eks/README.md](../terraform/eks/README.md). The steps below are the
+generic, any-cluster path.
 
 ## Prerequisites
 
@@ -50,8 +52,15 @@ helm upgrade --install acg infra/helm/alekhine \
   --set secrets.erlangCookie="$(openssl rand -hex 24)" \
   --set secrets.s3AccessKey="AKIA…" \
   --set secrets.s3SecretKey="…" \
+  --set secrets.s3BucketPrefix="alekhine-ab12cd-" \
   --wait --timeout 10m
 ```
+
+**Bucket naming.** The app uses three logical buckets (`pgn`, `analysis`,
+`books`). On S3/GCS, bucket names are **globally unique**, so set
+`secrets.s3BucketPrefix` to a per-deployment value — the app prepends it, so the
+real buckets are e.g. `alekhine-ab12cd-pgn`. On MinIO leave it empty. The EKS
+module creates the prefixed buckets and outputs the prefix for you.
 
 For anything beyond a demo, use a real secret store (AWS Secrets Manager / GCP
 Secret Manager via the external-secrets operator, or sealed-secrets) instead of
